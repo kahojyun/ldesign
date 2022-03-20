@@ -1,0 +1,6 @@
+{
+    "python.formatting.provider": "black",
+    "terminal.integrated.env.windows": {
+        "PYTHONPATH": "${workspaceFolder}"
+    }
+}
