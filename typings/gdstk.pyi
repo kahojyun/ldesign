@@ -3115,7 +3115,13 @@ class RobustPath:
             Newly created objects.
         """
     def arc(
-        self, radius, initial_angle, final_angle, rotation=..., width=..., offset=...
+        self,
+        radius: float | Sequence[float],
+        initial_angle: float,
+        final_angle: float,
+        rotation: float = 0,
+        width=...,
+        offset=...,
     ) -> RobustPath:
         """
         arc(radius, initial_angle, final_angle, rotation=0, width=None, offset=None) -> self
