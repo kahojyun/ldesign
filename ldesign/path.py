@@ -79,7 +79,7 @@ def _translate_meander(ops: list[PathOp]) -> list[PathOp]:
             case AutoMeander(
                 radius=r, length=l, width=w, depth=d, in_position=i, out_position=o
             ):
-                if current_angle is None:
+                if current_angle is None or l is None:
                     raise Exception
                 points = planning.plan_fixed_len(
                     r,

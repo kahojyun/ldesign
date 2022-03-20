@@ -1065,7 +1065,7 @@ class FlexPath:
         | tuple[float, float]
         | Callable = "flush",
         bend_radius: float | Sequence[float] = 0,
-        bend_function: Callable = None,
+        bend_function: Callable | None = None,
         tolerance: float = 1e-2,
         simple_path: bool = False,
         scale_width: bool = True,
@@ -1307,8 +1307,8 @@ class FlexPath:
     def horizontal(
         self,
         x: float | Sequence[float],
-        width: float | Sequence[float] = None,
-        offset: float | Sequence[float] = None,
+        width: float | Sequence[float] | None = None,
+        offset: float | Sequence[float] | None = None,
         relative: bool = False,
     ) -> FlexPath:
         """
@@ -1708,7 +1708,7 @@ class FlexPath:
         Returns:
             The polygonal contours defined by this path.
         """
-    def translate(self, dx: Point, dy: float = None) -> FlexPath:
+    def translate(self, dx: Point, dy: float | None = None) -> FlexPath:
         """
         translate(dx, dy=None) -> self
 
@@ -1815,7 +1815,7 @@ class GdsWriter:
         unit: float = 1e-6,
         precision: float = 1e-9,
         max_points: int = 199,
-        timestamp: datetime = None,
+        timestamp: datetime | None = None,
     ) -> None: ...
     def close(self) -> None:
         """
@@ -2171,7 +2171,10 @@ class Library:
         cells in the library.
         """
     def write_gds(
-        self, outfile: str | Path, max_points: int = 199, timestamp: datetime = None
+        self,
+        outfile: str | Path,
+        max_points: int = 199,
+        timestamp: datetime | None = None,
     ) -> None:
         """
         write_gds(outfile, max_points=199, timestamp=None) -> None
@@ -2694,7 +2697,7 @@ class Reference:
         x_reflection: bool = False,
         columns: int = 1,
         rows: int = 1,
-        spacing: Point = None,
+        spacing: Point | None = None,
     ) -> None: ...
     def apply_repetition(self) -> list:
         """
@@ -3653,7 +3656,9 @@ class RobustPath:
             s: Scaling factor.
             center (coordinate pair or complex): Center of the transformation.
         """
-    def segment(self, xy, width=..., offset=..., relative=...) -> RobustPath:
+    def segment(
+        self, xy: Point, width=..., offset=..., relative: bool = ...
+    ) -> RobustPath:
         """
         segment(xy, width=None, offset=None, relative=False) -> self
 
@@ -3794,7 +3799,13 @@ class RobustPath:
             dx: Translation in the x coordinate or translation vector.
             dy: Translation in the y coordinate.
         """
-    def turn(self, radius, angle, width=..., offset=...) -> RobustPath:
+    def turn(
+        self,
+        radius: float,
+        angle: float,
+        width: float | Sequence[float] = ...,
+        offset: float | Sequence[float] = ...,
+    ) -> RobustPath:
         """
         turn(radius, angle, width=None, offset=None) -> self
 
@@ -4018,7 +4029,7 @@ def cross(
 def ellipse(
     center: Point,
     radius: float | Sequence[float],
-    inner_radius: float | Sequence[float] = None,
+    inner_radius: float | Sequence[float] | None = None,
     initial_angle: float = 0,
     final_angle: float = 0,
     tolerance: float = 0.01,
@@ -4105,7 +4116,7 @@ def gds_info(infile: str | Path) -> GdsInfoDict:
         ``precision`` library precision
     """
 
-def gds_timestamp(filename: str | Path, timestamp: datetime = None) -> datetime:
+def gds_timestamp(filename: str | Path, timestamp: datetime | None = None) -> datetime:
     """
     gds_timestamp(filename, timestamp=None) -> datetime
 

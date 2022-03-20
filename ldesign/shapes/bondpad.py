@@ -2,10 +2,7 @@ from dataclasses import dataclass, field
 
 import gdstk
 import numpy as np
-
-import ldesign
-from ldesign import elements
-from ldesign.config import Config
+from ldesign import config, elements
 from ldesign.shapes.path import CpwArgs
 
 
@@ -20,7 +17,9 @@ class BondPadArgs:
 
 
 class BondPad(elements.Element):
-    def __init__(self, args: BondPadArgs = None, config: Config = None):
+    def __init__(
+        self, args: BondPadArgs | None = None, config: config.Config | None = None
+    ):
         super().__init__(config=config)
         if args is None:
             args = BondPadArgs()
@@ -37,13 +36,17 @@ class BondPad(elements.Element):
         end_gap = self.args.end_gap
         ld_inner = self.config.LD_AL_INNER
         ld_outer = self.config.LD_AL_OUTER
-        outer = (gdstk.FlexPath((0, 0), line_gap * 2 + line_width, **ld_outer)
-                 .horizontal(trans_len, width=pad_gap * 2 + pad_width, relative=True)
-                 .horizontal(pad_len + end_gap, relative=True))
-        inner = (gdstk.FlexPath((0, 0), line_width, **ld_inner)
-                 .horizontal(trans_len, width=pad_width, relative=True)
-                 .horizontal(pad_len, relative=True))
-        outer = gdstk.boolean(outer, inner, 'not', **ld_outer)
+        outer = (
+            gdstk.FlexPath((0, 0), line_gap * 2 + line_width, **ld_outer)
+            .horizontal(trans_len, width=pad_gap * 2 + pad_width, relative=True)
+            .horizontal(pad_len + end_gap, relative=True)
+        )
+        inner = (
+            gdstk.FlexPath((0, 0), line_width, **ld_inner)
+            .horizontal(trans_len, width=pad_width, relative=True)
+            .horizontal(pad_len, relative=True)
+        )
+        outer = gdstk.boolean(outer, inner, "not", **ld_outer)
         self.cell.add(*outer, inner)
         self.create_port("line", 0j, np.pi)
 
@@ -52,7 +55,7 @@ class BondPad(elements.Element):
         return self.ports["line"]
 
 
-if __name__ == '__main__':
-    ldesign.config.use_preset_design()
+if __name__ == "__main__":
+    config.use_preset_design()
     elem = BondPad()
     elem.view()

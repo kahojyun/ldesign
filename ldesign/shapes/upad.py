@@ -1,11 +1,8 @@
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import gdstk
 import numpy as np
-
-import ldesign
-from ldesign import elements
-from ldesign.config import Config
+from ldesign import config, elements
 
 
 @dataclass
@@ -19,24 +16,40 @@ class UPadArgs:
 
 
 class UPad(elements.Element):
-    def __init__(self, args: UPadArgs = None, config: Config = None):
+    def __init__(
+        self, args: UPadArgs | None = None, config: config.Config | None = None
+    ):
         super().__init__(config=config)
         if args is None:
             args = UPadArgs()
         self.args = args
         self._init_cell(**asdict(args))
 
-    def _init_cell(self, u_width, u_height, inner_gap, outer_gap, side_width, bottom_width):
+    def _init_cell(
+        self, u_width, u_height, inner_gap, outer_gap, side_width, bottom_width
+    ):
         ld_inner = self.config.LD_AL_INNER
         ld_outer = self.config.LD_AL_OUTER
-        inner = gdstk.rectangle(-side_width - u_width / 2 + 0j,
-                                side_width + u_width / 2 + 1j * (u_height + bottom_width))
-        inner_cut = gdstk.rectangle(-u_width / 2 + 1j * bottom_width, u_width / 2 + 1j * (bottom_width + u_height))
+        inner = gdstk.rectangle(
+            -side_width - u_width / 2 + 0j,
+            side_width + u_width / 2 + 1j * (u_height + bottom_width),
+        )
+        inner_cut = gdstk.rectangle(
+            -u_width / 2 + 1j * bottom_width,
+            u_width / 2 + 1j * (bottom_width + u_height),
+        )
         inner = gdstk.boolean(inner, inner_cut, "not", **ld_inner)
-        outer = gdstk.rectangle(-side_width - u_width / 2 - outer_gap - 1j * outer_gap,
-                                side_width + u_width / 2 + outer_gap + 1j * (u_height + bottom_width + outer_gap))
-        outer_cut = gdstk.rectangle(-u_width / 2 + inner_gap + 1j * (bottom_width + inner_gap),
-                                    u_width / 2 - inner_gap + 1j * (u_height + bottom_width + outer_gap))
+        outer = gdstk.rectangle(
+            -side_width - u_width / 2 - outer_gap - 1j * outer_gap,
+            side_width
+            + u_width / 2
+            + outer_gap
+            + 1j * (u_height + bottom_width + outer_gap),
+        )
+        outer_cut = gdstk.rectangle(
+            -u_width / 2 + inner_gap + 1j * (bottom_width + inner_gap),
+            u_width / 2 - inner_gap + 1j * (u_height + bottom_width + outer_gap),
+        )
         outer = gdstk.boolean(outer, [outer_cut] + inner, "not", **ld_outer)
         self.cell.add(*inner, *outer)
         self.create_port("line", -1j * outer_gap, np.pi * 3 / 2)
@@ -51,7 +64,7 @@ class UPad(elements.Element):
         return self.ports["u"]
 
 
-if __name__ == '__main__':
-    ldesign.config.use_preset_design()
+if __name__ == "__main__":
+    config.use_preset_design()
     elem = UPad()
     elem.view()
