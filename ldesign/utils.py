@@ -1,9 +1,10 @@
 def to_complex(point):
-    if isinstance(point, tuple):
-        return complex(*point)
-    elif isinstance(point, (float, int)):
-        return complex(point, 0)
-    elif isinstance(point, complex):
-        return point
-    else:
-        raise TypeError
+    match point:
+        case [r, i]:
+            return complex(r, i)
+        case float() | int():
+            return complex(point, 0)
+        case complex():
+            return point
+        case _:
+            raise TypeError
