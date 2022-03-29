@@ -186,7 +186,7 @@ class Element:
             raise TypeError
 
     def __repr__(self):
-        return f"{type(self).__name__}(name={self.name}, transformation={self.transformation})"
+        return f'{type(self).__name__}(name="{self.name}", transformation={self.transformation})'
 
     def copy(self):
         new = copy.copy(self)
