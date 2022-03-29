@@ -3,9 +3,10 @@ from collections import Sequence
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal, overload, Union, TypedDict
+from typing import Any, Literal, TypedDict, Union, overload
 
 import numpy
+from typing_extensions import Self
 
 __version__ = "0.8.2"
 
@@ -72,7 +73,7 @@ class Cell:
     def __init__(self, name: str) -> None: ...
     def add(
         self, *elements: Polygon | FlexPath | RobustPath | Label | Reference
-    ) -> Cell:
+    ) -> Self:
         """
         add(*elements) -> self
 
@@ -197,7 +198,7 @@ class Cell:
         Returns:
             Copy of this cell.
         """
-    def delete_property(self, name) -> Cell:
+    def delete_property(self, name) -> Self:
         """
         delete_property(name) -> self
 
@@ -223,7 +224,7 @@ class Cell:
         polygons: bool = True,
         paths: bool = True,
         labels: bool = True,
-    ) -> Cell:
+    ) -> Self:
         """
         filter(layers, types, operation, polygons=True, paths=True, labels=True) -> self
 
@@ -247,7 +248,7 @@ class Cell:
             >>> # Remove all elements except for those on layer 5:
             >>> cell.filter([5], [], "nor")
         """
-    def flatten(self, apply_repetitions: bool = True) -> Cell:
+    def flatten(self, apply_repetitions: bool = True) -> Self:
         """
         flatten(apply_repetitions=True) -> self
 
@@ -374,7 +375,7 @@ class Cell:
             list or None: List of property values. If no property is found,
             ``None`` is returned.
         """
-    def remove(self, *elements) -> Cell:
+    def remove(self, *elements) -> Self:
         """
         remove(*elements) -> self
 
@@ -390,7 +391,7 @@ class Cell:
             .. image:: ../cell/remove.*
                :align: center
         """
-    def set_property(self, name, value) -> Cell:
+    def set_property(self, name, value) -> Self:
         """
         set_property(name, value) -> self
 
@@ -418,7 +419,7 @@ class Cell:
         background=...,
         pad=...,
         sort_function=...,
-    ) -> Cell:
+    ) -> Self:
         """
         write_svg(outfile, scaling=10, precision=6, shape_style=None, label_style=None, background="#222222", pad="5%", sort_function=None) -> self
 
@@ -514,7 +515,7 @@ class Curve:
         :align: center"""
 
     def __init__(self, xy: Point, tolerance: float = 0.01) -> None: ...
-    def arc(self, radius, initial_angle, final_angle, rotation=...) -> Curve:
+    def arc(self, radius, initial_angle, final_angle, rotation=...) -> Self:
         """
         arc(radius, initial_angle, final_angle, rotation=0) -> self
 
@@ -542,7 +543,7 @@ class Curve:
             .. image:: ../curve/arc.*
                :align: center
         """
-    def bezier(self, xy, relative=...) -> Curve:
+    def bezier(self, xy, relative=...) -> Self:
         """
         bezier(xy, relative=False) -> self
 
@@ -565,7 +566,7 @@ class Curve:
             .. image:: ../curve/bezier.*
                :align: center
         """
-    def commands(self, *args) -> Curve:
+    def commands(self, *args) -> Self:
         """
         commands(*args) -> self
 
@@ -605,7 +606,7 @@ class Curve:
             .. image:: ../curve/commands.*
                :align: center
         """
-    def cubic(self, xy, relative=...) -> Curve:
+    def cubic(self, xy, relative=...) -> Self:
         """
         cubic(xy, relative=False) -> self
 
@@ -626,7 +627,7 @@ class Curve:
             .. image:: ../curve/cubic.*
                :align: center
         """
-    def cubic_smooth(self, xy, relative=...) -> Curve:
+    def cubic_smooth(self, xy, relative=...) -> Self:
         """
         cubic_smooth(xy, relative=False) -> self
 
@@ -650,7 +651,7 @@ class Curve:
             .. image:: ../curve/cubic_smooth.*
                :align: center
         """
-    def horizontal(self, x, relative=...) -> Curve:
+    def horizontal(self, x, relative=...) -> Self:
         """
         horizontal(x, relative=False) -> self
 
@@ -670,7 +671,7 @@ class Curve:
         final_curl=...,
         cycle=...,
         relative=...,
-    ) -> Curve:
+    ) -> Self:
         """
         interpolation(points, angles=None, tension_in=1, tension_out=1, initial_curl=1, final_curl=1, cycle=False, relative=False) -> self
 
@@ -729,7 +730,7 @@ class Curve:
            *Discrete Comput Geom* 1, 123–140 (1986). `DOI: 10.1007/BF02187690
            <https://doi.org/10.1007/BF02187690>`_.
         """
-    def parametric(self, curve_function, relative=...) -> Curve:
+    def parametric(self, curve_function, relative=...) -> Self:
         """
         parametric(curve_function, relative=True) -> self
 
@@ -775,7 +776,7 @@ class Curve:
                    [1., 0.],
                    [0., 1.]])
         """
-    def quadratic(self, xy, relative=...) -> Curve:
+    def quadratic(self, xy, relative=...) -> Self:
         """
         quadratic(xy, relative=False) -> self
 
@@ -789,7 +790,7 @@ class Curve:
         See also:
             :meth:`gdstk.Curve.cubic`
         """
-    def quadratic_smooth(self, xy, relative=...) -> Curve:
+    def quadratic_smooth(self, xy, relative=...) -> Self:
         """
         quadratic_smooth(xy, relative=False) -> self
 
@@ -805,7 +806,7 @@ class Curve:
         See also:
             :meth:`gdstk.Curve.cubic_smooth`
         """
-    def segment(self, xy, relative=...) -> Curve:
+    def segment(self, xy, relative=...) -> Self:
         """
         segment(xy, relative=False) -> self
 
@@ -827,7 +828,7 @@ class Curve:
             .. image:: ../curve/segment.*
                :align: center
         """
-    def turn(self, radius, angle) -> Curve:
+    def turn(self, radius, angle) -> Self:
         """
         turn(radius, angle) -> self
 
@@ -838,7 +839,7 @@ class Curve:
             angle: Turning angle. Positive values turn counter clockwise and
               negative values, clockwise.
         """
-    def vertical(self, y, relative=...) -> Curve:
+    def vertical(self, y, relative=...) -> Self:
         """
         vertical(y, relative=False) -> self
 
@@ -1086,7 +1087,7 @@ class FlexPath:
         """
     def arc(
         self, radius, initial_angle, final_angle, rotation=..., width=..., offset=...
-    ) -> FlexPath:
+    ) -> Self:
         """
         arc(radius, initial_angle, final_angle, rotation=0, width=None, offset=None) -> self
 
@@ -1116,7 +1117,7 @@ class FlexPath:
             .. image:: ../flexpath/arc.*
                :align: center
         """
-    def bezier(self, xy, width=..., offset=..., relative=...) -> FlexPath:
+    def bezier(self, xy, width=..., offset=..., relative=...) -> Self:
         """
         bezier(xy, width=None, offset=None, relative=False) -> self
 
@@ -1142,7 +1143,7 @@ class FlexPath:
             .. image:: ../flexpath/bezier.*
                :align: center
         """
-    def commands(self, *args, **kwargs) -> Any:
+    def commands(self, *args, **kwargs) -> Self:
         """
         commands(path_commands...) -> self
 
@@ -1193,7 +1194,7 @@ class FlexPath:
         Returns:
             Copy of this flexpath.
         """
-    def cubic(self, xy, width=..., offset=..., relative=...) -> FlexPath:
+    def cubic(self, xy, width=..., offset=..., relative=...) -> Self:
         """
         cubic(xy, width=None, offset=None, relative=False) -> self
 
@@ -1225,7 +1226,7 @@ class FlexPath:
             .. image:: ../flexpath/cubic.*
                :align: center
         """
-    def cubic_smooth(self, xy, width=..., offset=..., relative=...) -> FlexPath:
+    def cubic_smooth(self, xy, width=..., offset=..., relative=...) -> Self:
         """
         cubic_smooth(xy, width=None, offset=None, relative=False) -> self
 
@@ -1260,7 +1261,7 @@ class FlexPath:
             .. image:: ../flexpath/cubic_smooth.*
                :align: center
         """
-    def delete_gds_property(self, attr) -> FlexPath:
+    def delete_gds_property(self, attr) -> Self:
         """
         delete_gds_property(attr) -> self
 
@@ -1269,7 +1270,7 @@ class FlexPath:
         Args:
             attr (number): Property number.
         """
-    def delete_property(self, name) -> FlexPath:
+    def delete_property(self, name) -> Self:
         """
         delete_property(name) -> self
 
@@ -1310,7 +1311,7 @@ class FlexPath:
         width: float | Sequence[float] | None = None,
         offset: float | Sequence[float] | None = None,
         relative: bool = False,
-    ) -> FlexPath:
+    ) -> Self:
         """
         horizontal(x, width=None, offset=None, relative=False) -> self
 
@@ -1361,7 +1362,7 @@ class FlexPath:
         width=...,
         offset=...,
         relative=...,
-    ) -> FlexPath:
+    ) -> Self:
         """
         interpolation(points, angles=None, tension_in=1, tension_out=1, initial_curl=1, final_curl=1, cycle=False, width=None, offset=None, relative=True) -> self
 
@@ -1419,7 +1420,7 @@ class FlexPath:
            *Discrete Comput Geom* 1, 123–140 (1986). `DOI: 10.1007/BF02187690
            <https://doi.org/10.1007/BF02187690>`_.
         """
-    def mirror(self, p1, p2=...) -> FlexPath:
+    def mirror(self, p1, p2=...) -> Self:
         """
         mirror(p1, p2=(0, 0)) -> self
 
@@ -1438,9 +1439,7 @@ class FlexPath:
         Returns:
             The offsets of each path at each point.
         """
-    def parametric(
-        self, path_function, width=..., offset=..., relative=...
-    ) -> FlexPath:
+    def parametric(self, path_function, width=..., offset=..., relative=...) -> Self:
         """
         parametric(path_function, width=None, offset=None, relative=True) -> self
 
@@ -1484,7 +1483,7 @@ class FlexPath:
         Returns:
             Copy of the points that make up each parallel path.
         """
-    def quadratic(self, xy, width=..., offset=..., relative=...) -> FlexPath:
+    def quadratic(self, xy, width=..., offset=..., relative=...) -> Self:
         """
         quadratic(xy, width=None, offset=None, relative=False) -> self
 
@@ -1510,7 +1509,7 @@ class FlexPath:
         See also:
             :meth:`gdstk.FlexPath.cubic`
         """
-    def quadratic_smooth(self, xy, width=..., offset=..., relative=...) -> FlexPath:
+    def quadratic_smooth(self, xy, width=..., offset=..., relative=...) -> Self:
         """
         quadratic_smooth(xy, width=None, offset=None, relative=False) -> self
 
@@ -1538,7 +1537,7 @@ class FlexPath:
         See also:
             :meth:`gdstk.FlexPath.cubic_smooth`
         """
-    def rotate(self, angle, center=...) -> FlexPath:
+    def rotate(self, angle, center=...) -> Self:
         """
         rotate(angle, center=(0, 0)) -> self
 
@@ -1548,7 +1547,7 @@ class FlexPath:
             angle: Rotation angle (in radians).
             center (coordinate pair or complex): Center of the transformation.
         """
-    def scale(self, s, center=...) -> FlexPath:
+    def scale(self, s, center=...) -> Self:
         """
         scale(s, center=(0, 0)) -> self
 
@@ -1558,7 +1557,7 @@ class FlexPath:
             s: Scaling factor.
             center (coordinate pair or complex): Center of the transformation.
         """
-    def segment(self, xy, width=..., offset=..., relative=...) -> FlexPath:
+    def segment(self, xy, width=..., offset=..., relative=...) -> Self:
         """
         segment(xy, width=None, offset=None, relative=False) -> self
 
@@ -1591,7 +1590,7 @@ class FlexPath:
             .. image:: ../flexpath/segment.*
                :align: center
         """
-    def set_bend_function(self, *functions) -> FlexPath:
+    def set_bend_function(self, *functions) -> Self:
         """
         set_bend_function(*functions) -> self
 
@@ -1603,7 +1602,7 @@ class FlexPath:
         See also:
             :class:`gdstk.FlexPath`
         """
-    def set_bend_radius(self, *radii) -> FlexPath:
+    def set_bend_radius(self, *radii) -> Self:
         """
         set_bend_radius(*radii) -> self
 
@@ -1615,7 +1614,7 @@ class FlexPath:
         See also:
             :class:`gdstk.FlexPath`
         """
-    def set_datatypes(self, *datatypes) -> FlexPath:
+    def set_datatypes(self, *datatypes) -> Self:
         """
         set_datatypes(*datatypes) -> self
 
@@ -1624,7 +1623,7 @@ class FlexPath:
         Args:
             datatypes: data type numbers for all paths.
         """
-    def set_ends(self, *ends) -> FlexPath:
+    def set_ends(self, *ends) -> Self:
         """
         set_ends(*ends) -> self
 
@@ -1637,7 +1636,7 @@ class FlexPath:
         See also:
             :class:`gdstk.FlexPath`
         """
-    def set_gds_property(self, attr, value) -> FlexPath:
+    def set_gds_property(self, attr, value) -> Self:
         """
         set_gds_property(attr, value) -> self
 
@@ -1650,7 +1649,7 @@ class FlexPath:
             attr (number): Property number.
             value (str): Property value.
         """
-    def set_joins(self, *joins) -> FlexPath:
+    def set_joins(self, *joins) -> Self:
         """
         set_joins(*joins) -> self
 
@@ -1663,7 +1662,7 @@ class FlexPath:
         See also:
             :class:`gdstk.FlexPath`
         """
-    def set_layers(self, *layers) -> FlexPath:
+    def set_layers(self, *layers) -> Self:
         """
         set_layers(*layers) -> self
 
@@ -1672,7 +1671,7 @@ class FlexPath:
         Args:
             layers: layer numbers for all paths.
         """
-    def set_property(self, name, value) -> FlexPath:
+    def set_property(self, name, value) -> Self:
         """
         set_property(name, value) -> self
 
@@ -1708,7 +1707,7 @@ class FlexPath:
         Returns:
             The polygonal contours defined by this path.
         """
-    def translate(self, dx: Point, dy: float | None = None) -> FlexPath:
+    def translate(self, dx: Point, dy: float | None = None) -> Self:
         """
         translate(dx, dy=None) -> self
 
@@ -1718,7 +1717,7 @@ class FlexPath:
             dx: Translation in the x coordinate or translation vector.
             dy: Translation in the y coordinate.
         """
-    def turn(self, radius, angle, width=..., offset=...) -> FlexPath:
+    def turn(self, radius, angle, width=..., offset=...) -> Self:
         """
         turn(radius, angle, width=None, offset=None) -> self
 
@@ -1737,7 +1736,7 @@ class FlexPath:
               center of the path. The offsets are linearly tapered from their
               previous values.
         """
-    def vertical(self, y, width=..., offset=..., relative=...) -> FlexPath:
+    def vertical(self, y, width=..., offset=..., relative=...) -> Self:
         """
         vertical(y, width=None, offset=None, relative=False) -> self
 
@@ -1823,7 +1822,7 @@ class GdsWriter:
 
         Finish writing the output file and close it.
         """
-    def write(self, *cells: Cell) -> GdsWriter:
+    def write(self, *cells: Cell) -> Self:
         """
         write(*cells) -> self
 
@@ -1932,7 +1931,7 @@ class Label:
         Returns:
             Copy of this label.
         """
-    def delete_gds_property(self, attr: int) -> Label:
+    def delete_gds_property(self, attr: int) -> Self:
         """
         delete_gds_property(attr) -> self
 
@@ -1941,7 +1940,7 @@ class Label:
         Args:
             attr (number): Property number.
         """
-    def delete_property(self, name: str) -> Label:
+    def delete_property(self, name: str) -> Self:
         """
         delete_property(name) -> self
 
@@ -1976,7 +1975,7 @@ class Label:
             list or None: List of property values. If no property is found,
             ``None`` is returned.
         """
-    def set_gds_property(self, attr: int, value: str) -> Label:
+    def set_gds_property(self, attr: int, value: str) -> Self:
         """
         set_gds_property(attr, value) -> self
 
@@ -1991,7 +1990,7 @@ class Label:
         """
     def set_property(
         self, name: str, value: PropertyValueType | list[PropertyValueType]
-    ) -> Label:
+    ) -> Self:
         """
         set_property(name, value) -> self
 
@@ -2050,7 +2049,7 @@ class Library:
     def __init__(
         self, name: str = "library", unit: float = 1e-6, precision: float = 1e-9
     ) -> None: ...
-    def add(self, *cells: Cell | RawCell) -> Library:
+    def add(self, *cells: Cell | RawCell) -> Self:
         """
         add(*cells) -> self
 
@@ -2071,7 +2070,7 @@ class Library:
         See also:
             :meth:`gdstk.Library.replace`
         """
-    def delete_property(self, name: str) -> Library:
+    def delete_property(self, name: str) -> Self:
         """
         delete_property(name) -> self
 
@@ -2120,13 +2119,13 @@ class Library:
             >>> polygon = gdstk.rectangle((0, 0), (1, 1))
             >>> cell.add(polygon)
         """
-    def remove(self, *cells: Cell | RawCell) -> Library:
+    def remove(self, *cells: Cell | RawCell) -> Self:
         """
         remove(*cells) -> self
 
         Remove cells from this library.
         """
-    def replace(self, *cells: Cell | RawCell) -> Library:
+    def replace(self, *cells: Cell | RawCell) -> Self:
         """
         replace(*cells) -> self
 
@@ -2143,7 +2142,7 @@ class Library:
         """
     def set_property(
         self, name: str, value: PropertyValueType | list[PropertyValueType]
-    ) -> Library:
+    ) -> Self:
         """
         set_property(name, value) -> self
 
@@ -2380,7 +2379,7 @@ class Polygon:
         Returns:
             Copy of this polygon.
         """
-    def delete_gds_property(self, attr) -> Polygon:
+    def delete_gds_property(self, attr) -> Self:
         """
         delete_gds_property(attr) -> self
 
@@ -2389,7 +2388,7 @@ class Polygon:
         Args:
             attr (number): Property number.
         """
-    def delete_property(self, name) -> Polygon:
+    def delete_property(self, name) -> Self:
         """
         delete_property(name) -> self
 
@@ -2398,7 +2397,7 @@ class Polygon:
         Args:
             name (str): Property name.
         """
-    def fillet(self, radius, tolerance=...) -> Polygon:
+    def fillet(self, radius, tolerance=...) -> Self:
         """
         fillet(radius, tolerance=0.01) -> self
 
@@ -2479,7 +2478,7 @@ class Polygon:
             list or None: List of property values. If no property is found,
             ``None`` is returned.
         """
-    def mirror(self, p1, p2=...) -> Polygon:
+    def mirror(self, p1, p2=...) -> Self:
         """
         mirror(p1, p2=(0, 0)) -> self
 
@@ -2489,7 +2488,7 @@ class Polygon:
             p1 (coordinate pair or complex): First point in the mirror line.
             p2 (coordinate pair or complex): Second point in the mirror line.
         """
-    def rotate(self, angle, center=...) -> Polygon:
+    def rotate(self, angle, center=...) -> Self:
         """
         rotate(angle, center=(0, 0)) -> self
 
@@ -2499,7 +2498,7 @@ class Polygon:
             angle: Rotation angle (in radians).
             center (coordinate pair or complex): Center of the transformation.
         """
-    def scale(self, sx, sy=..., center=...) -> Polygon:
+    def scale(self, sx, sy=..., center=...) -> Self:
         """
         scale(sx, sy=0, center=(0, 0)) -> self
 
@@ -2510,7 +2509,7 @@ class Polygon:
             sy: Scaling in the y direction. If set to 0, ``sx`` is used instead.
             center (coordinate pair or complex): Center of the transformation.
         """
-    def set_gds_property(self, attr, value) -> Polygon:
+    def set_gds_property(self, attr, value) -> Self:
         """
         set_gds_property(attr, value) -> self
 
@@ -2523,7 +2522,7 @@ class Polygon:
             attr (number): Property number.
             value (str): Property value.
         """
-    def set_property(self, name, value) -> Polygon:
+    def set_property(self, name, value) -> Self:
         """
         set_property(name, value) -> self
 
@@ -2548,7 +2547,7 @@ class Polygon:
         rotation=...,
         translation=...,
         matrix=...,
-    ) -> Polygon:
+    ) -> Self:
         """
         transform(magnification=1, x_reflection=False, rotation=0, translation=None, matrix=None) -> self
 
@@ -2571,7 +2570,7 @@ class Polygon:
             If the number of rows or columns of the transformation matrix is 3,
             homogeneous coordinates are used.
         """
-    def translate(self, dx, dy=...) -> Polygon:
+    def translate(self, dx, dy=...) -> Self:
         """
         translate(dx, dy=None) -> self
 
@@ -2789,7 +2788,7 @@ class Reference:
         Returns:
             Copy of this reference.
         """
-    def delete_gds_property(self, attr) -> Reference:
+    def delete_gds_property(self, attr) -> Self:
         """
         delete_gds_property(attr) -> self
 
@@ -2798,7 +2797,7 @@ class Reference:
         Args:
             attr (number): Property number.
         """
-    def delete_property(self, name) -> Reference:
+    def delete_property(self, name) -> Self:
         """
         delete_property(name) -> self
 
@@ -2833,7 +2832,7 @@ class Reference:
             list or None: List of property values. If no property is found,
             ``None`` is returned.
         """
-    def set_gds_property(self, attr, value) -> Reference:
+    def set_gds_property(self, attr, value) -> Self:
         """
         set_gds_property(attr, value) -> self
 
@@ -2846,7 +2845,7 @@ class Reference:
             attr (number): Property number.
             value (str): Property value.
         """
-    def set_property(self, name, value) -> Reference:
+    def set_property(self, name, value) -> Self:
         """
         set_property(name, value) -> self
 
@@ -3122,7 +3121,7 @@ class RobustPath:
         rotation: float = 0,
         width=...,
         offset=...,
-    ) -> RobustPath:
+    ) -> Self:
         """
         arc(radius, initial_angle, final_angle, rotation=0, width=None, offset=None) -> self
 
@@ -3153,7 +3152,7 @@ class RobustPath:
             .. image:: ../robustpath/arc.*
                :align: center
         """
-    def bezier(self, xy, width=..., offset=..., relative=...) -> RobustPath:
+    def bezier(self, xy, width=..., offset=..., relative=...) -> Self:
         """
         bezier(xy, width=None, offset=None, relative=False) -> self
 
@@ -3193,7 +3192,7 @@ class RobustPath:
         See also:
             :meth:`gdstk.RobustPath.segment`
         """
-    def commands(self, *args, **kwargs) -> Any:
+    def commands(self, *args, **kwargs) -> Self:
         """
         commands(path_commands...) -> self
 
@@ -3244,7 +3243,7 @@ class RobustPath:
         Returns:
             Copy of this robustpath.
         """
-    def cubic(self, xy, width=..., offset=..., relative=...) -> RobustPath:
+    def cubic(self, xy, width=..., offset=..., relative=...) -> Self:
         """
         cubic(xy, width=None, offset=None, relative=False) -> self
 
@@ -3283,7 +3282,7 @@ class RobustPath:
         See also:
             :meth:`gdstk.RobustPath.segment`
         """
-    def cubic_smooth(self, xy, width=..., offset=..., relative=...) -> RobustPath:
+    def cubic_smooth(self, xy, width=..., offset=..., relative=...) -> Self:
         """
         cubic_smooth(xy, width=None, offset=None, relative=False) -> self
 
@@ -3325,7 +3324,7 @@ class RobustPath:
         See also:
             :meth:`gdstk.RobustPath.segment`, :meth:`gdstk.RobustPath.cubic`
         """
-    def delete_gds_property(self, attr) -> RobustPath:
+    def delete_gds_property(self, attr) -> Self:
         """
         delete_gds_property(attr) -> self
 
@@ -3334,7 +3333,7 @@ class RobustPath:
         Args:
             attr (number): Property number.
         """
-    def delete_property(self, name) -> RobustPath:
+    def delete_property(self, name) -> Self:
         """
         delete_property(name) -> self
 
@@ -3385,7 +3384,7 @@ class RobustPath:
         Returns:
             The spine gradient of the path at ``u``.
         """
-    def horizontal(self, x, width=..., offset=..., relative=...) -> RobustPath:
+    def horizontal(self, x, width=..., offset=..., relative=...) -> Self:
         """
         horizontal(x, width=None, offset=None, relative=False) -> self
 
@@ -3426,7 +3425,7 @@ class RobustPath:
         width=...,
         offset=...,
         relative=...,
-    ) -> RobustPath:
+    ) -> Self:
         """
         interpolation(points, angles=None, tension_in=1, tension_out=1, initial_curl=1, final_curl=1, cycle=False, width=None, offset=None, relative=True) -> self
 
@@ -3488,7 +3487,7 @@ class RobustPath:
            *Discrete Comput Geom* 1, 123–140 (1986). `DOI: 10.1007/BF02187690
            <https://doi.org/10.1007/BF02187690>`_.
         """
-    def mirror(self, p1, p2=...) -> RobustPath:
+    def mirror(self, p1, p2=...) -> Self:
         """
         mirror(p1, p2=(0, 0)) -> self
 
@@ -3515,7 +3514,7 @@ class RobustPath:
         """
     def parametric(
         self, path_function, path_gradient=..., width=..., offset=..., relative=...
-    ) -> RobustPath:
+    ) -> Self:
         """
         parametric(path_function, path_gradient=None, width=None, offset=None, relative=True) -> self
 
@@ -3579,7 +3578,7 @@ class RobustPath:
         Returns:
             The spine position of the path at ``u``.
         """
-    def quadratic(self, xy, width=..., offset=..., relative=...) -> RobustPath:
+    def quadratic(self, xy, width=..., offset=..., relative=...) -> Self:
         """
         quadratic(xy, width=None, offset=None, relative=False) -> self
 
@@ -3609,7 +3608,7 @@ class RobustPath:
         See also:
             :meth:`gdstk.RobustPath.segment`, :meth:`gdstk.RobustPath.cubic`
         """
-    def quadratic_smooth(self, xy, width=..., offset=..., relative=...) -> RobustPath:
+    def quadratic_smooth(self, xy, width=..., offset=..., relative=...) -> Self:
         """
         quadratic_smooth(xy, width=None, offset=None, relative=False) -> self
 
@@ -3642,7 +3641,7 @@ class RobustPath:
             :meth:`gdstk.RobustPath.segment`,
             :meth:`gdstk.RobustPath.cubic_smooth`
         """
-    def rotate(self, angle, center=...) -> RobustPath:
+    def rotate(self, angle, center=...) -> Self:
         """
         rotate(angle, center=(0, 0)) -> self
 
@@ -3652,7 +3651,7 @@ class RobustPath:
             angle: Rotation angle (in radians).
             center (coordinate pair or complex): Center of the transformation.
         """
-    def scale(self, s, center=...) -> RobustPath:
+    def scale(self, s, center=...) -> Self:
         """
         scale(s, center=(0, 0)) -> self
 
@@ -3662,9 +3661,7 @@ class RobustPath:
             s: Scaling factor.
             center (coordinate pair or complex): Center of the transformation.
         """
-    def segment(
-        self, xy: Point, width=..., offset=..., relative: bool = ...
-    ) -> RobustPath:
+    def segment(self, xy: Point, width=..., offset=..., relative: bool = ...) -> Self:
         """
         segment(xy, width=None, offset=None, relative=False) -> self
 
@@ -3715,7 +3712,7 @@ class RobustPath:
             .. image:: ../robustpath/segment1.*
                :align: center
         """
-    def set_datatypes(self, *datatypes) -> RobustPath:
+    def set_datatypes(self, *datatypes) -> Self:
         """
         set_datatypes(*datatypes) -> self
 
@@ -3724,7 +3721,7 @@ class RobustPath:
         Args:
             datatypes: data type numbers for all paths.
         """
-    def set_ends(self, *ends) -> RobustPath:
+    def set_ends(self, *ends) -> Self:
         """
         set_ends(*ends) -> self
 
@@ -3737,7 +3734,7 @@ class RobustPath:
         See also:
             :class:`gdstk.RobustPath`
         """
-    def set_gds_property(self, attr, value) -> RobustPath:
+    def set_gds_property(self, attr, value) -> Self:
         """
         set_gds_property(attr, value) -> self
 
@@ -3750,7 +3747,7 @@ class RobustPath:
             attr (number): Property number.
             value (str): Property value.
         """
-    def set_layers(self, *layers) -> RobustPath:
+    def set_layers(self, *layers) -> Self:
         """
         set_layers(*layers) -> self
 
@@ -3759,7 +3756,7 @@ class RobustPath:
         Args:
             layers: layer numbers for all paths.
         """
-    def set_property(self, name, value) -> RobustPath:
+    def set_property(self, name, value) -> Self:
         """
         set_property(name, value) -> self
 
@@ -3795,7 +3792,7 @@ class RobustPath:
         Returns:
             The polygonal contours defined by this path.
         """
-    def translate(self, dx, dy=...) -> RobustPath:
+    def translate(self, dx, dy=...) -> Self:
         """
         translate(dx, dy=None) -> self
 
@@ -3811,7 +3808,7 @@ class RobustPath:
         angle: float,
         width: float | Sequence[float] = ...,
         offset: float | Sequence[float] = ...,
-    ) -> RobustPath:
+    ) -> Self:
         """
         turn(radius, angle, width=None, offset=None) -> self
 
@@ -3830,7 +3827,7 @@ class RobustPath:
               center of the path. The offsets are linearly tapered from their
               previous values.
         """
-    def vertical(self, y, width=..., offset=..., relative=...) -> RobustPath:
+    def vertical(self, y, width=..., offset=..., relative=...) -> Self:
         """
         vertical(y, width=None, offset=None, relative=False) -> self
 
