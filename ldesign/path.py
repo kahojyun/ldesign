@@ -112,11 +112,11 @@ def _create_gdstk_path(pos: complex, cfg: config.Config, cpw: CpwArgs):
     )
 
 
-def is_zero_len(v: complex):
+def is_zero_len(v: complex) -> bool:
     return abs(v) < LEN_ERR
 
 
-def is_zero_angle(angle: float):
+def is_zero_angle(angle: float) -> bool:
     return abs(angle) < ANGLE_ERR
 
 
@@ -207,7 +207,7 @@ def _solve_to_two_circle(
     )
 
 
-def _get_turn_angle(start: float, end: float, sign: float):
+def _get_turn_angle(start: float, end: float, sign: float) -> float:
     ans = (end - start) % (2 * math.pi)
     if sign > 0:
         return ans
@@ -216,7 +216,7 @@ def _get_turn_angle(start: float, end: float, sign: float):
     return ans
 
 
-def _get_arc_angle(current_angle: float, turn_angle: float):
+def _get_arc_angle(current_angle: float, turn_angle: float) -> tuple[float, float]:
     start_angle = math.copysign(math.pi / 2, -turn_angle) + current_angle
     final_angle = start_angle + turn_angle
     return start_angle, final_angle
@@ -238,7 +238,7 @@ class _BaseOpVisitor:
         self.current_angle = None
         self.current_radius = 0
 
-    def process_ops(self, ops: Sequence[PathOp]):
+    def process_ops(self, ops: Sequence[PathOp]) -> None:
         pending_ops = deque(ops)
         if not self.started:
             first_op = pending_ops.popleft()
@@ -262,7 +262,7 @@ class _BaseOpVisitor:
                 pending_ops,
             )
 
-    def start(self, pos: complex, angle: float | None, radius: float):
+    def start(self, pos: complex, angle: float | None, radius: float) -> None:
         self.started = True
         self.start_pos = pos
         self.start_angle = angle
@@ -285,7 +285,7 @@ class _BaseOpVisitor:
         self._ensure_started()
         self._turn_inner(radius, angle)
 
-    def _ensure_started(self):
+    def _ensure_started(self) -> None:
         if not self.started:
             raise RuntimeError("Not started")
 
@@ -322,7 +322,7 @@ class _BaseOpVisitor:
                 radius, start_angle
             )
 
-    def _process_single_op(self, next_op: PathOp, pending_ops: deque[PathOp]):
+    def _process_single_op(self, next_op: PathOp, pending_ops: deque[PathOp]) -> None:
         match next_op:
             case SegmentOp():
                 self._process_op_segment(next_op, pending_ops)
@@ -337,7 +337,9 @@ class _BaseOpVisitor:
             case _:
                 raise TypeError(f"Unknown op {next_op=}")
 
-    def _process_op_segment(self, next_op: SegmentOp, pending_ops: deque[PathOp]):
+    def _process_op_segment(
+        self, next_op: SegmentOp, pending_ops: deque[PathOp]
+    ) -> None:
         match next_op:
             case SegmentOp(
                 point=elements.DockingPort() as next_port,
@@ -368,10 +370,10 @@ class _BaseOpVisitor:
                     next_pos, next_radius, future_point, future_angle, future_radius
                 )
 
-    def _process_op_extend(self, next_op: ExtendOp, pending_ops: deque[PathOp]):
+    def _process_op_extend(self, next_op: ExtendOp, pending_ops: deque[PathOp]) -> None:
         self._extend_inner(next_op.length)
 
-    def _process_op_turn(self, next_op: TurnOp, pending_ops: deque[PathOp]):
+    def _process_op_turn(self, next_op: TurnOp, pending_ops: deque[PathOp]) -> None:
         self._turn_inner(next_op.radius, next_op.angle)
 
     def _process_segment_to_port(
@@ -477,7 +479,7 @@ class _BaseOpVisitor:
         self.segment(arc_start)
         self.turn(next_radius, turn_angle)
 
-    def _process_op_bridge(self, next_op: BridgeOp, pending_ops: deque[PathOp]):
+    def _process_op_bridge(self, next_op: BridgeOp, pending_ops: deque[PathOp]) -> None:
         if self.current_angle is None:
             self.current_angle = 0
         length = next_op.bridge.length
@@ -488,7 +490,7 @@ class _BaseOpVisitor:
         next_op: AutoMeanderOp,
         pending_ops: deque[PathOp],
         update_pos: bool = True,
-    ):
+    ) -> None:
         if update_pos:
             if self.current_angle is None:
                 self.current_angle = 0
@@ -501,7 +503,7 @@ class LengthTracker(_BaseOpVisitor):
     total_length: float
     op_lens: list[float]
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.total_length = 0
         self.op_lens = []
@@ -517,20 +519,22 @@ class LengthTracker(_BaseOpVisitor):
             self.total_length += radius * abs(angle)
         super()._turn_inner(radius, angle)
 
-    def _process_op_segment(self, next_op: SegmentOp, pending_ops: deque[PathOp]):
+    def _process_op_segment(
+        self, next_op: SegmentOp, pending_ops: deque[PathOp]
+    ) -> None:
         current_len = self.total_length
         super()._process_op_segment(next_op, pending_ops)
         self.op_lens.append(self.total_length - current_len)
 
-    def _process_op_extend(self, next_op: ExtendOp, pending_ops: deque[PathOp]):
+    def _process_op_extend(self, next_op: ExtendOp, pending_ops: deque[PathOp]) -> None:
         self.op_lens.append(next_op.length)
         super()._process_op_extend(next_op, pending_ops)
 
-    def _process_op_turn(self, next_op: TurnOp, pending_ops: deque[PathOp]):
+    def _process_op_turn(self, next_op: TurnOp, pending_ops: deque[PathOp]) -> None:
         self.op_lens.append(next_op.radius * abs(next_op.angle))
         super()._process_op_turn(next_op, pending_ops)
 
-    def _process_op_bridge(self, next_op: BridgeOp, pending_ops: deque[PathOp]):
+    def _process_op_bridge(self, next_op: BridgeOp, pending_ops: deque[PathOp]) -> None:
         super()._process_op_bridge(next_op, pending_ops)
         self.total_length += next_op.bridge.length
         self.op_lens.append(next_op.bridge.length)
@@ -540,7 +544,7 @@ class LengthTracker(_BaseOpVisitor):
         next_op: AutoMeanderOp,
         pending_ops: deque[PathOp],
         update_pos: bool = True,
-    ):
+    ) -> None:
         super()._process_op_automeander(next_op, pending_ops, update_pos)
         length = next_op.length
         if length is None:
@@ -585,7 +589,7 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
             self.current_path.arc(radius, start_angle, final_angle)
         super()._turn_inner(radius, angle)
 
-    def _process_op_bridge(self, next_op: BridgeOp, pending_ops: deque[PathOp]):
+    def _process_op_bridge(self, next_op: BridgeOp, pending_ops: deque[PathOp]) -> None:
         current_angle = self.current_angle
         current_pos = self.current_pos
         if current_angle is None:
@@ -602,7 +606,7 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
         next_op: AutoMeanderOp,
         pending_ops: deque[PathOp],
         update_pos: bool = True,
-    ):
+    ) -> None:
         if next_op.length is None:
             self.current_path = None
             super()._process_op_automeander(next_op, pending_ops, update_pos)
@@ -634,7 +638,7 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
         self.cpw.create_port("end", self.current_pos, self.current_angle)
         return self.cpw
 
-    def _ensure_path(self):
+    def _ensure_path(self) -> None:
         if self.current_path is None:
             path = _create_gdstk_path(self.current_pos, self.cfg, self.options.cpw)
             self.cpw.cell.add(path)
@@ -652,7 +656,7 @@ class PathOpGenerator:
         start: complex | elements.DockingPort,
         radius: float | None = None,
         options: PathOptions | None = None,
-    ):
+    ) -> None:
         if isinstance(start, elements.DockingPort):
             start = start.copy()
             # rotate start port by pi to unify with other ports
