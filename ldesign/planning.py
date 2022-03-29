@@ -165,6 +165,12 @@ def _get_port_pos(
         return 0
 
 
+def _get_n_and_ratio(x, max_n):
+    n = min(math.floor(x), max_n)
+    r = x - n
+    return n, r
+
+
 def plan_standard_meander(
     radius: float,
     width: float,
@@ -184,8 +190,7 @@ def plan_standard_meander(
     max_n = _get_max_n(radius, depth)
 
     def func(x: float) -> float:
-        _n = min(math.floor(x), max_n)
-        _r = x - _n
+        _n, _r = _get_n_and_ratio(x, max_n)
         return (
             _calc_standard_meander_total_len_with_ratio(
                 _n, _r, radius, width, depth, in_pos, out_pos, direction
@@ -194,8 +199,7 @@ def plan_standard_meander(
         )
 
     root: float = sopt.brentq(func, 1, max_n + 1)  # type: ignore
-    n = math.floor(root)
-    r = root - n
+    n, r = _get_n_and_ratio(root, max_n)
     return _get_standard_meander_commands(
         n, r, radius, width, depth, in_pos, out_pos, direction
     )

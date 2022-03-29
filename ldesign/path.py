@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import cmath
+import dataclasses
 import logging
 import math
 from collections import deque
@@ -47,6 +48,17 @@ class SegmentOp(PathOp):
 
 
 @dataclass
+class ExtendOp(PathOp):
+    length: float
+
+
+@dataclass
+class TurnOp(PathOp):
+    radius: float
+    angle: float
+
+
+@dataclass
 class BridgeOp(PathOp):
     bridge: CpwBridgeArgs = field(default_factory=CpwBridgeArgs)
 
@@ -60,6 +72,22 @@ class AutoMeanderOp(PathOp):
     out_position: float
     radius: float
     length: float | None = None
+
+    def calc_min_length(self) -> float:
+        return planning.calc_standard_meander_min_len(
+            self.radius, self.width, self.depth, self.in_position, self.out_position
+        )
+
+    def calc_max_length(self) -> float:
+        length, _ = planning.calc_standard_meander_max_len(
+            self.radius,
+            self.width,
+            self.depth,
+            self.in_position,
+            self.out_position,
+            self.direction,
+        )
+        return length
 
 
 def _create_gdstk_path(pos: complex, cfg: config.Config, cpw: CpwArgs):
@@ -298,10 +326,16 @@ class _BaseOpVisitor:
         match next_op:
             case SegmentOp():
                 self._process_op_segment(next_op, pending_ops)
+            case ExtendOp():
+                self._process_op_extend(next_op, pending_ops)
+            case TurnOp():
+                self._process_op_turn(next_op, pending_ops)
             case BridgeOp():
                 self._process_op_bridge(next_op, pending_ops)
             case AutoMeanderOp():
                 self._process_op_automeander(next_op, pending_ops)
+            case _:
+                raise TypeError(f"Unknown op {next_op=}")
 
     def _process_op_segment(self, next_op: SegmentOp, pending_ops: deque[PathOp]):
         match next_op:
@@ -333,6 +367,12 @@ class _BaseOpVisitor:
                 self._process_segment_to_point(
                     next_pos, next_radius, future_point, future_angle, future_radius
                 )
+
+    def _process_op_extend(self, next_op: ExtendOp, pending_ops: deque[PathOp]):
+        self._extend_inner(next_op.length)
+
+    def _process_op_turn(self, next_op: TurnOp, pending_ops: deque[PathOp]):
+        self._turn_inner(next_op.radius, next_op.angle)
 
     def _process_segment_to_port(
         self, port: elements.DockingPort, radius: float
@@ -482,6 +522,14 @@ class LengthTracker(_BaseOpVisitor):
         super()._process_op_segment(next_op, pending_ops)
         self.op_lens.append(self.total_length - current_len)
 
+    def _process_op_extend(self, next_op: ExtendOp, pending_ops: deque[PathOp]):
+        self.op_lens.append(next_op.length)
+        super()._process_op_extend(next_op, pending_ops)
+
+    def _process_op_turn(self, next_op: TurnOp, pending_ops: deque[PathOp]):
+        self.op_lens.append(next_op.radius * abs(next_op.angle))
+        super()._process_op_turn(next_op, pending_ops)
+
     def _process_op_bridge(self, next_op: BridgeOp, pending_ops: deque[PathOp]):
         super()._process_op_bridge(next_op, pending_ops)
         self.total_length += next_op.bridge.length
@@ -502,8 +550,6 @@ class LengthTracker(_BaseOpVisitor):
 
 
 class CpwWaveguideBuilder(_BaseOpVisitor):
-    elems: list[elements.Element]
-    paths: list[gdstk.RobustPath]
     cpw: elements.CpwWaveguide
     current_path: gdstk.RobustPath | None
     options: PathOptions
@@ -516,8 +562,6 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
     ) -> None:
         super().__init__()
         self.cpw = elements.CpwWaveguide()
-        self.elems = []
-        self.paths = []
         self.current_path = None
         self.options = options
         self.cfg = cfg
@@ -636,6 +680,12 @@ class PathOpGenerator:
             case _:
                 raise TypeError(point)
 
+    def extend(self, length: float) -> None:
+        self._ops.append(ExtendOp(length))
+
+    def turn(self, radius: float, angle: float) -> None:
+        self._ops.append(TurnOp(radius, angle))
+
     def bridge(self, width: float, length: float) -> None:
         self._ops.append(BridgeOp(CpwBridgeArgs(width, length)))
 
@@ -657,21 +707,39 @@ class PathOpGenerator:
         return list(self._ops)
 
 
+def set_total_length(ops: Sequence[PathOp], total_length: float) -> list[PathOp]:
+    lt = LengthTracker()
+    lt.process_ops(ops)
+    meander_len_min = 0
+    meander_len_max = 0
+    for op in ops:
+        match op:
+            case AutoMeanderOp(length=None):
+                meander_len_min += op.calc_min_length()
+                meander_len_max += op.calc_max_length()
+    if not (meander_len_min <= total_length - lt.total_length <= meander_len_max):
+        raise ValueError(
+            f"{total_length=}, available range: [{lt.total_length+meander_len_min}, "
+            f"{lt.total_length+meander_len_max}]."
+        )
+    len_left = total_length - meander_len_min - lt.total_length
+    new_ops = []
+    for op in ops:
+        match op:
+            case AutoMeanderOp(length=None):
+                len_min = op.calc_min_length()
+                len_max = op.calc_max_length()
+                new_len = min(len_max, len_min + len_left)
+                new_op = dataclasses.replace(op, length=new_len)
+                len_left -= new_len - len_min
+                new_ops.append(new_op)
+            case _:
+                new_ops.append(op)
+    return new_ops
+
+
 if __name__ == "__main__":
     # logging.basicConfig(level=logging.DEBUG)
-    # elem = Element()
-    # builder = CoplanarWaveguideBuilder(0 + 0j)
-    # builder.segment(200 + 100j)
-    # builder.segment(-100 + 100j)
-    # builder.auto_meander(700, 2000, "right", 100, 100, 30, 6000)
-    # builder.segment(-5000 + 100j)
-    # cpw = builder.build()
-    # cpw = elem.add_element(cpw)
-    # bp = BondPad()
-    # bp = elem.add_element(bp, cpw.port_start, bp.port_line)
-
-    # elem.write_gds("../ptest.gds")
-    # elem.view()
     config.use_preset_design()
     p1 = -100 + 100j
     a1 = -2
@@ -687,8 +755,11 @@ if __name__ == "__main__":
     points = np.cumsum(points) + 300 - 300j
     for p in points:
         op_gen.segment(p)
-        op_gen.auto_meander(100, 300, "auto", 0, 0, 10, 1000)
+        op_gen.auto_meander(100, 300, "auto", 0, 0, 10, None)
+    op_gen.turn(30, math.pi / 2)
+    op_gen.extend(300)
     ops = op_gen.build()
+    ops = set_total_length(ops, 30000)
 
     builder = CpwWaveguideBuilder(PathOptions(), config.global_config)
     builder.process_ops(ops)
@@ -696,6 +767,7 @@ if __name__ == "__main__":
     lc.process_ops(ops)
     print(lc.total_length)
     print(lc.op_lens)
+    print(sum(lc.op_lens))
     print(len(lc.op_lens))
     print(len(ops))
     bp = BondPad()
