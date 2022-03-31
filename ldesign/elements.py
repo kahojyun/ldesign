@@ -132,6 +132,14 @@ class DockingPort:
         result.element = root_elem
         return result
 
+    def as_reference(
+        self, point: complex, angle: float = 0, root_elem: Element | None = None
+    ):
+        transformed_port = self.get_transformed_port(root_elem)
+        transformed_port.point += cmath.rect(1, transformed_port.angle) * point
+        transformed_port.angle += angle
+        return transformed_port
+
 
 TE = TypeVar("TE", bound="Element")
 
@@ -219,7 +227,9 @@ class Element:
                 )
             )
 
-    def get_total_transformation(self, root_elem: Element | None = None):
+    def get_total_transformation(
+        self, root_elem: Element | None = None
+    ) -> Transformation:
         # from bottom to top
         transformations = []
         p = self
@@ -336,8 +346,8 @@ class Element:
 
 
 class CpwWaveguide(Element):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, config: Config | None = None):
+        super().__init__(config=config)
 
     @property
     def port_start(self):

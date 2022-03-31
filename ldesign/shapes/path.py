@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass, field
 
 import gdstk
@@ -101,9 +102,35 @@ class FluxEnd(elements.Element):
         return self.ports["flux"]
 
 
+class StraightCpw(elements.CpwWaveguide):
+    def __init__(
+        self,
+        length: float,
+        args: CpwArgs | None = None,
+        config: config.Config | None = None,
+    ):
+        super().__init__(config=config)
+        if args is None:
+            args = CpwArgs()
+        self.args = args
+        self._init_cell(length)
+
+    def _init_cell(self, length: float):
+        inner = gdstk.FlexPath(
+            [0j, length + 0j], self.args.width, **self.config.LD_AL_INNER
+        )
+        outer = gdstk.FlexPath([0j, length + 0j], self.args.width + 2 * self.args.gap)
+        outer = gdstk.boolean(outer, inner, "not", **self.config.LD_AL_OUTER)
+        self.cell.add(*outer, inner)
+        self.create_port("start", 0j, math.pi)
+        self.create_port("end", length + 0j, 0)
+
+
 if __name__ == "__main__":
     config.use_preset_design()
     elem = OpenEnd(CpwArgs())
     elem.view()
     elem = FluxEnd()
+    elem.view()
+    elem = StraightCpw(100)
     elem.view()

@@ -13,9 +13,9 @@ import gdstk
 import numpy as np
 
 from ldesign import config, elements, planning
-from ldesign.shapes import bridge
+from ldesign.shapes import crossover
 from ldesign.shapes.bondpad import BondPad
-from ldesign.shapes.bridge import CpwBridgeArgs
+from ldesign.shapes.crossover import CrossoverArgs
 from ldesign.shapes.path import CpwArgs
 from ldesign.utils import to_complex
 
@@ -28,7 +28,7 @@ ANGLE_ERR = 1e-5
 class PathOptions:
     radius: float = 30
     cpw: CpwArgs = field(default_factory=CpwArgs)
-    total_length: float | None = None
+    parent_element: elements.Element | None = None
 
 
 class PathOp:
@@ -59,8 +59,8 @@ class TurnOp(PathOp):
 
 
 @dataclass
-class BridgeOp(PathOp):
-    bridge: CpwBridgeArgs = field(default_factory=CpwBridgeArgs)
+class CrossoverOp(PathOp):
+    crossover: CrossoverArgs = field(default_factory=CrossoverArgs)
 
 
 @dataclass
@@ -229,14 +229,16 @@ class _BaseOpVisitor:
     current_angle: float | None
     current_radius: float
     started: bool
+    options: PathOptions
 
-    def __init__(self) -> None:
+    def __init__(self, options: PathOptions | None) -> None:
         self.started = False
         self.start_pos = 0j
         self.start_angle = None
         self.current_pos = 0j
         self.current_angle = None
         self.current_radius = 0
+        self.options = PathOptions() if options is None else options
 
     def process_ops(self, ops: Sequence[PathOp]) -> None:
         pending_ops = deque(ops)
@@ -245,10 +247,12 @@ class _BaseOpVisitor:
             start_angle = None
             match first_op:
                 case SegmentOp(
-                    point=elements.DockingPort(point=start_pos, angle=start_angle),
+                    point=elements.DockingPort() as port,
                     radius=start_radius,
                 ):
-                    start_angle -= math.pi
+                    port = self._transform_port(port)
+                    start_pos = port.point
+                    start_angle = port.angle - math.pi
                 case SegmentOp(point=complex() as start_pos, radius=start_radius):
                     pass
                 case _:
@@ -330,8 +334,8 @@ class _BaseOpVisitor:
                 self._process_op_extend(next_op, pending_ops)
             case TurnOp():
                 self._process_op_turn(next_op, pending_ops)
-            case BridgeOp():
-                self._process_op_bridge(next_op, pending_ops)
+            case CrossoverOp():
+                self._process_op_crossover(next_op, pending_ops)
             case AutoMeanderOp():
                 self._process_op_automeander(next_op, pending_ops)
             case _:
@@ -345,6 +349,7 @@ class _BaseOpVisitor:
                 point=elements.DockingPort() as next_port,
                 radius=next_radius,
             ):
+                next_port = self._transform_port(next_port)
                 self._process_segment_to_port(
                     next_port,
                     next_radius,
@@ -360,12 +365,12 @@ class _BaseOpVisitor:
                     case SegmentOp(point=complex() as future_point):
                         pass
                     case SegmentOp(
-                        point=elements.DockingPort(
-                            point=future_point, angle=future_angle
-                        ),
+                        point=elements.DockingPort() as future_port,
                         radius=future_radius,
                     ):
-                        future_angle += math.pi
+                        future_port = self._transform_port(future_port)
+                        future_point = future_port.point
+                        future_angle = future_port.angle + math.pi
                 self._process_segment_to_point(
                     next_pos, next_radius, future_point, future_angle, future_radius
                 )
@@ -469,6 +474,7 @@ class _BaseOpVisitor:
         vec1 = next_pos - start_pos
         vec2 = end_pos - next_pos
         # next_radius is nonzero
+        # FIXME
         if is_zero_len(vec1) or is_zero_len(vec2):
             raise Exception
         turn_angle = cmath.phase(vec2 / vec1)
@@ -479,11 +485,14 @@ class _BaseOpVisitor:
         self.segment(arc_start)
         self.turn(next_radius, turn_angle)
 
-    def _process_op_bridge(self, next_op: BridgeOp, pending_ops: deque[PathOp]) -> None:
+    def _process_op_crossover(
+        self, next_op: CrossoverOp, pending_ops: deque[PathOp]
+    ) -> None:
         if self.current_angle is None:
             self.current_angle = 0
-        length = next_op.bridge.length
-        self.current_pos += cmath.rect(length, self.current_angle)
+        self.current_pos += cmath.rect(
+            next_op.crossover.total_length, self.current_angle
+        )
 
     def _process_op_automeander(
         self,
@@ -498,13 +507,16 @@ class _BaseOpVisitor:
                 next_op.out_position - next_op.in_position + 1j * next_op.depth
             )
 
+    def _transform_port(self, port: elements.DockingPort) -> elements.DockingPort:
+        return port.get_transformed_port(self.options.parent_element)
+
 
 class LengthTracker(_BaseOpVisitor):
     total_length: float
     op_lens: list[float]
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, options: PathOptions | None) -> None:
+        super().__init__(options)
         self.total_length = 0
         self.op_lens = []
 
@@ -534,10 +546,13 @@ class LengthTracker(_BaseOpVisitor):
         self.op_lens.append(next_op.radius * abs(next_op.angle))
         super()._process_op_turn(next_op, pending_ops)
 
-    def _process_op_bridge(self, next_op: BridgeOp, pending_ops: deque[PathOp]) -> None:
-        super()._process_op_bridge(next_op, pending_ops)
-        self.total_length += next_op.bridge.length
-        self.op_lens.append(next_op.bridge.length)
+    def _process_op_crossover(
+        self, next_op: CrossoverOp, pending_ops: deque[PathOp]
+    ) -> None:
+        super()._process_op_crossover(next_op, pending_ops)
+        length = next_op.crossover.total_length
+        self.total_length += length
+        self.op_lens.append(length)
 
     def _process_op_automeander(
         self,
@@ -556,18 +571,18 @@ class LengthTracker(_BaseOpVisitor):
 class CpwWaveguideBuilder(_BaseOpVisitor):
     cpw: elements.CpwWaveguide
     current_path: gdstk.RobustPath | None
-    options: PathOptions
     cfg: config.Config
 
     def __init__(
         self,
-        options: PathOptions,
-        cfg: config.Config,
+        options: PathOptions | None,
+        cfg: config.Config | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(options)
         self.cpw = elements.CpwWaveguide()
         self.current_path = None
-        self.options = options
+        if cfg is None:
+            cfg = config.global_config
         self.cfg = cfg
 
     def _segment_inner(self, point: complex) -> None:
@@ -589,17 +604,19 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
             self.current_path.arc(radius, start_angle, final_angle)
         super()._turn_inner(radius, angle)
 
-    def _process_op_bridge(self, next_op: BridgeOp, pending_ops: deque[PathOp]) -> None:
+    def _process_op_crossover(
+        self, next_op: CrossoverOp, pending_ops: deque[PathOp]
+    ) -> None:
         current_angle = self.current_angle
         current_pos = self.current_pos
         if current_angle is None:
             current_angle = 0
-        b = bridge.Bridge(next_op.bridge, self.cfg)
+        b = crossover.Crossover(next_op.crossover, self.cfg)
         b = self.cpw.add_element(
             b, elements.DockingPort(current_pos, current_angle, self.cpw), b.port_start
         )
         self.current_path = None
-        super()._process_op_bridge(next_op, pending_ops)
+        super()._process_op_crossover(next_op, pending_ops)
 
     def _process_op_automeander(
         self,
@@ -657,6 +674,7 @@ class PathOpGenerator:
         radius: float | None = None,
         options: PathOptions | None = None,
     ) -> None:
+        self.options = PathOptions() if options is None else options
         if isinstance(start, elements.DockingPort):
             start = start.copy()
             # rotate start port by pi to unify with other ports
@@ -664,7 +682,6 @@ class PathOpGenerator:
         if radius is None:
             radius = self.options.radius
         self._ops = [SegmentOp(start, radius)]
-        self.options = PathOptions() if options is None else options
 
     def segment(
         self,
@@ -687,11 +704,32 @@ class PathOpGenerator:
     def extend(self, length: float) -> None:
         self._ops.append(ExtendOp(length))
 
-    def turn(self, radius: float, angle: float) -> None:
+    def turn(self, angle: float, radius: float | None) -> None:
+        if radius is None:
+            radius = self.options.radius
         self._ops.append(TurnOp(radius, angle))
 
-    def bridge(self, width: float, length: float) -> None:
-        self._ops.append(BridgeOp(CpwBridgeArgs(width, length)))
+    def crossover(
+        self,
+        cpw_under: CpwArgs,
+        gap: float,
+        length_pad: float,
+        length_trans: float,
+        length_in: float,
+        port: elements.DockingPort | None = None,
+    ) -> None:
+        cpw_over = self.options.cpw
+        crossover_args = CrossoverArgs(
+            cpw_under, cpw_over, gap, length_in, length_pad, length_trans
+        )
+        if port is not None:
+            self.segment(
+                port.as_reference(
+                    crossover_args.total_length / 2 + 0j,
+                    root_elem=self.options.parent_element,
+                )
+            )
+        self._ops.append(CrossoverOp(crossover_args))
 
     def auto_meander(
         self,
@@ -711,8 +749,10 @@ class PathOpGenerator:
         return list(self._ops)
 
 
-def set_total_length(ops: Sequence[PathOp], total_length: float) -> list[PathOp]:
-    lt = LengthTracker()
+def set_total_length(
+    ops: Sequence[PathOp], total_length: float, options: PathOptions | None = None
+) -> list[PathOp]:
+    lt = LengthTracker(options)
     lt.process_ops(ops)
     meander_len_min = 0
     meander_len_max = 0
@@ -742,6 +782,23 @@ def set_total_length(ops: Sequence[PathOp], total_length: float) -> list[PathOp]
     return new_ops
 
 
+def create_cpw_from_ops(
+    ops: Sequence[PathOp],
+    total_length: float | None = None,
+    options: PathOptions | None = None,
+    cfg: config.Config | None = None,
+) -> elements.CpwWaveguide:
+    if options is None:
+        options = PathOptions()
+    if cfg is None:
+        cfg = config.global_config
+    if total_length is not None:
+        ops = set_total_length(ops, total_length, options)
+    cpw_builder = CpwWaveguideBuilder(options, cfg)
+    cpw_builder.process_ops(ops)
+    return cpw_builder.build()
+
+
 if __name__ == "__main__":
     # logging.basicConfig(level=logging.DEBUG)
     config.use_preset_design()
@@ -765,9 +822,9 @@ if __name__ == "__main__":
     ops = op_gen.build()
     ops = set_total_length(ops, 30000)
 
-    builder = CpwWaveguideBuilder(PathOptions(), config.global_config)
+    builder = CpwWaveguideBuilder(None, config.global_config)
     builder.process_ops(ops)
-    lc = LengthTracker()
+    lc = LengthTracker(None)
     lc.process_ops(ops)
     print(lc.total_length)
     print(lc.op_lens)

@@ -52,7 +52,7 @@ class UPad(elements.Element):
         )
         outer = gdstk.boolean(outer, [outer_cut] + inner, "not", **ld_outer)
         self.cell.add(*inner, *outer)
-        self.create_port("line", -1j * outer_gap, np.pi * 3 / 2)
+        self.create_port("line", 0j, np.pi * 3 / 2)
         self.create_port("u", 1j * (bottom_width + inner_gap), np.pi / 2)
 
     @property

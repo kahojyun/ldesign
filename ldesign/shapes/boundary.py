@@ -19,10 +19,6 @@ class BoundaryArgs:
     star_cut_size: float | None = None
 
 
-boundary_12port = BoundaryArgs()
-boundary_24port = BoundaryArgs(width=10700)
-
-
 class Boundary(elements.Element):
     def __init__(
         self, args: BoundaryArgs | None = None, config: config.Config | None = None
