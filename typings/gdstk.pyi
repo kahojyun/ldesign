@@ -2570,7 +2570,7 @@ class Polygon:
             If the number of rows or columns of the transformation matrix is 3,
             homogeneous coordinates are used.
         """
-    def translate(self, dx, dy=...) -> Self:
+    def translate(self, dx: float | Point, dy: float | None = None) -> Self:
         """
         translate(dx, dy=None) -> self
 

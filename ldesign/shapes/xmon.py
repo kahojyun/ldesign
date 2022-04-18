@@ -13,11 +13,6 @@ class XmonArgs:
     z_gap: float = 18
     arm_len: float = 140
     arm_width: float = 24
-    z_inner_pad_width: float = 8
-    z_inner_pad_height: float = 6
-    z_outer_pad_width: float = 4
-    z_outer_pad_height: float = 8
-    z_outer_pad_dist: float = 14
     xy_port: Literal["n", "e", "w"] = "e"
     r_port: Literal["n", "e", "w"] = "w"
 
@@ -39,27 +34,15 @@ class Xmon(elements.Element):
         arm_width,
         xy_port,
         r_port,
-        z_inner_pad_width,
-        z_inner_pad_height,
-        z_outer_pad_width,
-        z_outer_pad_height,
-        z_outer_pad_dist,
     ):
         ld_inner = self.config.LD_AL_INNER
         ld_outer = self.config.LD_AL_OUTER
-        inner = [
-            gdstk.cross(
-                1j * (arm_len + arm_width / 2),
-                2 * arm_len + arm_width,
-                arm_width,
-                **ld_inner
-            ),
-            gdstk.rectangle(
-                -z_inner_pad_width / 2 - 1j * z_inner_pad_height,
-                z_inner_pad_width / 2 + 0j,
-                **ld_inner
-            ),
-        ]
+        inner = gdstk.cross(
+            1j * (arm_len + arm_width / 2),
+            2 * arm_len + arm_width,
+            arm_width,
+            **ld_inner
+        )
         bottom_x = -arm_width / 2 - gap
         bottom_y = -z_gap
         top_x = -bottom_x
@@ -72,22 +55,8 @@ class Xmon(elements.Element):
             gdstk.rectangle(bottom_x + 1j * bottom_y, top_x + 1j * top_y),
             gdstk.rectangle(left_x + 1j * left_y, right_x + 1j * right_y),
         ]
-        outer_cut = [
-            gdstk.rectangle(
-                -z_outer_pad_dist / 2 - 1j * z_gap,
-                -z_outer_pad_dist / 2
-                - z_outer_pad_width
-                - 1j * (z_gap - z_outer_pad_height),
-            ),
-            gdstk.rectangle(
-                z_outer_pad_dist / 2 - 1j * z_gap,
-                z_outer_pad_dist / 2
-                + z_outer_pad_width
-                - 1j * (z_gap - z_outer_pad_height),
-            ),
-        ]
-        outer = gdstk.boolean(outer, inner + outer_cut, "not", **ld_outer)
-        self.cell.add(*outer, *inner)
+        outer = gdstk.boolean(outer, inner, "not", **ld_outer)
+        self.cell.add(*outer, inner)
         point_map = {
             "n": 1j * top_y,
             "e": right_x + 1j * (arm_len + arm_width / 2),

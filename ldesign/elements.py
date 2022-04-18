@@ -8,27 +8,16 @@ import uuid
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import reduce
-from typing import ClassVar, Literal, Optional, TypeVar
+from typing import ClassVar, Optional, TypeVar
 
 import gdspy
 import gdstk
 import numpy as np
 
 from ldesign.config import Config, global_config
-from ldesign.planning import plan_fixed_len
 from ldesign.utils import to_complex
 
-LD_AL_INNER = {"layer": 1, "datatype": 1}
-LD_AL_OUTER = {"layer": 1, "datatype": 0}
-LD_BANDAGE = {"layer": 7, "datatype": 0}
-LD_JJ_PAD = {"layer": 6, "datatype": 0}
-LD_JJ = {"layer": 5, "datatype": 0}
-LD_BRIDGE_UNDER = {"layer": 4, "datatype": 0}
-LD_BRIDGE = {"layer": 3, "datatype": 0}
-LD_LABEL = {"layer": 127, "texttype": 0}
-
-
-Transformable = TypeVar("Transformable", "Transformation", "DockingPort", complex)
+_Transformable = TypeVar("_Transformable", "Transformation", "DockingPort", complex)
 
 
 @dataclass
@@ -86,7 +75,7 @@ class Transformation:
         t = Transformation(origin, rotation=axis_angle)
         return t @ self @ t.inverse()
 
-    def __matmul__(self, other: Transformable) -> Transformable:
+    def __matmul__(self, other: _Transformable) -> _Transformable:
         if isinstance(other, Transformation):
             return other.transform(self)
         if isinstance(other, DockingPort):
@@ -298,25 +287,35 @@ class Element:
 
     def flatten(self):
         cell = self.cell.flatten()
-        outer = cell.get_polygons(**LD_AL_OUTER)
-        inner = cell.get_polygons(**LD_AL_INNER)
-        outer = gdstk.boolean(outer, inner, "not", **LD_AL_OUTER)
-        inner = gdstk.boolean(inner, [], "or", **LD_AL_INNER)
-        cell.filter([LD_AL_OUTER["layer"]], [LD_AL_OUTER["datatype"]], "and")
-        cell.filter([LD_AL_INNER["layer"]], [LD_AL_INNER["datatype"]], "and")
+        ld_outer = self.config.LD_AL_OUTER
+        ld_inner = self.config.LD_AL_INNER
+        outer = cell.get_polygons(**ld_outer)
+        inner = cell.get_polygons(**ld_inner)
+        outer = gdstk.boolean(outer, inner, "not", **ld_outer)
+        inner = gdstk.boolean(inner, [], "or", **ld_inner)
+        cell.filter([ld_outer["layer"]], [ld_outer["datatype"]], "and")
+        cell.filter([ld_inner["layer"]], [ld_inner["datatype"]], "and")
         cell.add(*outer)
         cell.add(*inner)
 
-    def add_to_library(self, lib: gdstk.Library, flatten=True, test_region=None):
+    def add_to_library(
+        self,
+        lib: gdstk.Library,
+        flatten=True,
+        test_region: tuple[complex, complex] | None = None,
+    ):
         if test_region is not None:
             self.flatten()
-            cell = gdstk.Cell(self.cell.name + "_test")
-            poly = self.cell.get_polygons(**LD_AL_OUTER)
-            cell.add(
-                *gdstk.boolean(
-                    gdstk.rectangle(*test_region), poly, "not", **LD_AL_OUTER
-                )
+            cell = self.cell.copy(self.cell.name + "_test")
+            ld_outer = self.config.LD_AL_OUTER
+            ld_inner = self.config.LD_AL_INNER
+            outer_poly = self.cell.get_polygons(**ld_outer)
+            base_al = gdstk.boolean(
+                gdstk.rectangle(*test_region), outer_poly, "not", **ld_outer
             )
+            cell.filter([ld_outer["layer"]], [ld_outer["datatype"]], "and")
+            cell.filter([ld_inner["layer"]], [ld_inner["datatype"]], "and")
+            cell.add(*base_al)
             lib.add(cell)
         if flatten:
             self.flatten()
@@ -336,7 +335,7 @@ class Element:
         self,
         filename: str,
         flatten=True,
-        test_region=None,
+        test_region: tuple[complex, complex] | None = None,
         libname="library",
         max_points=4000,
     ):
@@ -356,67 +355,3 @@ class CpwWaveguide(Element):
     @property
     def port_end(self):
         return self.ports["end"]
-
-
-class Cpw(Element):
-    def __init__(self, points, gap=2, width=4, radius=50, end_gap=False):
-        super().__init__()
-        if end_gap:
-            outer = gdstk.FlexPath(
-                points,
-                gap * 2 + width,
-                bend_radius=radius,
-                ends=(0, gap),
-                **LD_AL_OUTER,
-            )
-        else:
-            outer = gdstk.FlexPath(
-                points, gap * 2 + width, bend_radius=radius, **LD_AL_OUTER
-            )
-        inner = gdstk.FlexPath(points, width, bend_radius=radius, **LD_AL_INNER)
-        outer = gdstk.boolean(outer, inner, "not", **LD_AL_OUTER)
-        self.cell.add(inner, *outer)
-        self.point_begin = to_complex(points[0])
-        self.point_end = to_complex(points[-1])
-
-
-class MeanderAuto(Element):
-    def __init__(
-        self,
-        gap,
-        width,
-        radius,
-        total_len,
-        in_direction: Literal["e", "n", "w"],
-        out_side: Literal["e", "n", "w", "s"],
-        out_position,
-        height,
-        left_width,
-        right_width,
-    ):
-        super().__init__()
-        outer_width = width + 2 * gap
-        points = plan_fixed_len(
-            radius,
-            total_len - outer_width,
-            in_direction,
-            out_side,
-            out_position,
-            height - outer_width,
-            left_width - outer_width / 2,
-            right_width - outer_width / 2,
-        )
-        points[0] = complex(0, -outer_width / 2)
-        if out_side == "e":
-            last_point_offset = outer_width / 2
-        elif out_side == "n":
-            last_point_offset = outer_width / 2 * 1j
-        elif out_side == "w":
-            last_point_offset = -outer_width / 2
-        else:
-            last_point_offset = -outer_width / 2 * 1j
-        points[-1] = to_complex(points[-1]) + last_point_offset
-        cpw_elem = Cpw(points, gap, width, radius)
-        self.add_element(cpw_elem)
-        self.point_begin = cpw_elem.point_begin
-        self.point_end = cpw_elem.point_end
