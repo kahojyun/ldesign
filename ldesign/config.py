@@ -14,6 +14,7 @@ class Config:
     label_ports: bool = False
     port_width: float = 0.5
     port_length: float = 2
+    tolerance: float = 0.01
 
 
 global_config = Config()
@@ -21,3 +22,4 @@ global_config = Config()
 
 def use_preset_design():
     global_config.label_ports = True
+    global_config.tolerance = 0.5

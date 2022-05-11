@@ -29,6 +29,8 @@ class PathOptions:
     radius: float = 30
     cpw: CpwArgs = field(default_factory=CpwArgs)
     parent_element: elements.Element | None = None
+    first_bridge: float | None = None
+    bridge_spacing: float | None = None
 
 
 class PathOp:
@@ -109,6 +111,7 @@ def _create_gdstk_path(pos: complex, cfg: config.Config, cpw: CpwArgs):
             cfg.LD_AL_OUTER["datatype"],
             cfg.LD_AL_OUTER["datatype"],
         ],
+        tolerance=cfg.tolerance,
     )
 
 
@@ -572,6 +575,7 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
     cpw: elements.CpwWaveguide
     current_path: gdstk.RobustPath | None
     cfg: config.Config
+    bridge_len_traker: float
 
     def __init__(
         self,
@@ -584,12 +588,44 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
         if cfg is None:
             cfg = config.global_config
         self.cfg = cfg
+        if self.options.bridge_spacing is not None:
+            if self.options.first_bridge is not None:
+                self.bridge_len_traker = self.options.first_bridge
+            else:
+                self.bridge_len_traker = self.options.bridge_spacing
+        else:
+            self.bridge_len_traker = 0
+
+    def _make_bridge(self, point: complex, angle: float) -> None:
+        cpw_args = self.options.cpw
+        # FIXME add path options
+        bridge_len_sub = cpw_args.gap * 2 + cpw_args.width * 2 + 6
+        bridge = crossover.Bridge(
+            crossover.BridgeArgs(length_sub=bridge_len_sub, width_sub=7)
+        )
+        self.cpw.add_element(
+            bridge,
+            elements.DockingPort(point, angle, self.cpw),
+            bridge.port_center,
+            elements.Transformation(rotation=math.pi / 2),
+        )
 
     def _segment_inner(self, point: complex) -> None:
         self._ensure_path()
         assert self.current_path is not None
         v = point - self.current_pos
+
         if not is_zero_len(v):
+            if self.options.bridge_spacing is not None:
+                # make bridge
+                left_len = abs(v)
+                while left_len > self.bridge_len_traker:
+                    left_len -= self.bridge_len_traker
+                    self.bridge_len_traker = self.options.bridge_spacing
+                    bridge_point = point - v * left_len / abs(v)
+                    bridge_angle = cmath.phase(v)
+                    self._make_bridge(bridge_point, bridge_angle)
+                self.bridge_len_traker -= left_len
             self.current_path.segment(point)
         super()._segment_inner(point)
 
@@ -602,6 +638,24 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
                 current_angle = 0
             start_angle, final_angle = _get_arc_angle(current_angle, angle)
             self.current_path.arc(radius, start_angle, final_angle)
+            if self.options.bridge_spacing is not None:
+                # make bridge
+                left_angle = abs(angle)
+                point = self.current_pos
+                turn_center = point + cmath.rect(
+                    radius, current_angle + math.copysign(math.pi / 2, angle)
+                )
+                while left_angle * radius > self.bridge_len_traker:
+                    left_angle -= self.bridge_len_traker / radius
+                    self.bridge_len_traker = self.options.bridge_spacing
+                    bridge_angle = (
+                        current_angle + angle - math.copysign(left_angle, angle)
+                    )
+                    bridge_point = turn_center - cmath.rect(
+                        radius, bridge_angle + math.copysign(math.pi / 2, angle)
+                    )
+                    self._make_bridge(bridge_point, bridge_angle)
+                self.bridge_len_traker -= left_angle * radius
         super()._turn_inner(radius, angle)
 
     def _process_op_crossover(

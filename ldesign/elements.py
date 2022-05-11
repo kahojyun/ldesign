@@ -306,17 +306,26 @@ class Element:
     ):
         if test_region is not None:
             self.flatten()
-            cell = self.cell.copy(self.cell.name + "_test")
+            temp_cell = gdstk.Cell(self.cell.name + "_temp")
+            rect = gdstk.rectangle(*test_region)
+            for poly in self.cell.get_polygons(include_paths=True):
+                temp_cell.add(
+                    *gdstk.boolean(
+                        rect, poly, "and", layer=poly.layer, datatype=poly.datatype
+                    )
+                )
             ld_outer = self.config.LD_AL_OUTER
             ld_inner = self.config.LD_AL_INNER
-            outer_poly = self.cell.get_polygons(**ld_outer)
-            base_al = gdstk.boolean(
-                gdstk.rectangle(*test_region), outer_poly, "not", **ld_outer
-            )
-            cell.filter([ld_outer["layer"]], [ld_outer["datatype"]], "and")
-            cell.filter([ld_inner["layer"]], [ld_inner["datatype"]], "and")
-            cell.add(*base_al)
-            lib.add(cell)
+            outer_poly = temp_cell.get_polygons(**ld_outer)
+            base_al = gdstk.boolean(rect, outer_poly, "not", **ld_outer)
+            temp_cell.filter([ld_outer["layer"]], [ld_outer["datatype"]], "and")
+            temp_cell.filter([ld_inner["layer"]], [ld_inner["datatype"]], "and")
+            temp_cell.add(*base_al)
+            new_cell = gdstk.Cell(self.cell.name + "_test")
+            new_cell.add(gdstk.Reference(temp_cell, -test_region[0]))
+            new_cell.flatten()
+            lib.add(new_cell)
+            return
         if flatten:
             self.flatten()
             lib.add(self.cell)

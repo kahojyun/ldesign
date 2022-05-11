@@ -332,12 +332,12 @@ class Cell:
         """
     def get_polygons(
         self,
-        apply_repetitions=...,
-        include_paths=...,
-        depth=...,
-        layer=...,
-        datatype=...,
-    ) -> list:
+        apply_repetitions: bool = True,
+        include_paths: bool = True,
+        depth: int | None = None,
+        layer: int | None = None,
+        datatype: int | None = None,
+    ) -> list[Polygon]:
         """
         get_polygons(apply_repetitions=True, include_paths=True, depth=None, layer=None, datatype=None) -> list
 
