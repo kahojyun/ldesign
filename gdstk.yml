@@ -1,0 +1,14 @@
+name: gdstk
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - gdstk=0.8.2
+  - gdspy
+  - numpy
+  - scipy
+  - ipython
+  - jupyterlab
+  - black
+  - pylint

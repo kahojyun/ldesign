@@ -876,7 +876,8 @@ if __name__ == "__main__":
     ops = op_gen.build()
     ops = set_total_length(ops, 30000)
 
-    builder = CpwWaveguideBuilder(None, config.global_config)
+    options = PathOptions(bridge_spacing=1000)
+    builder = CpwWaveguideBuilder(options, config.global_config)
     builder.process_ops(ops)
     lc = LengthTracker(None)
     lc.process_ops(ops)

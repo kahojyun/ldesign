@@ -138,7 +138,17 @@ class Bridge(elements.Element):
         top.horizontal(length_sub, relative=True)
         top.horizontal(length_trans, width_pad, relative=True)
         top.horizontal(length_pad, relative=True)
-        self.cell.add(sub, top)
+        via1 = gdstk.rectangle(
+            -length_pad - length_trans - width_pad / 2 * 1j,
+            -length_trans + width_pad / 2 * 1j,
+            **self.config.LD_BRIDGE_VIA
+        )
+        via2 = gdstk.rectangle(
+            length_sub + length_trans - width_pad / 2 * 1j,
+            length_sub + length_trans + length_pad + width_pad / 2 * 1j,
+            **self.config.LD_BRIDGE_VIA
+        )
+        self.cell.add(sub, top, via1, via2)
         self.create_port("start", -length_pad - length_trans + 0j, math.pi)
         self.create_port("end", length_sub + length_trans + length_pad + 0j, 0)
         self.create_port("center", length_sub / 2 + 0j, math.pi)

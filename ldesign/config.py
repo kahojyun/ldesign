@@ -10,6 +10,7 @@ class Config:
     LD_JJ = {"layer": 5, "datatype": 0}
     LD_BRIDGE_UNDER = {"layer": 4, "datatype": 0}
     LD_BRIDGE = {"layer": 3, "datatype": 0}
+    LD_BRIDGE_VIA = {"layer": 100, "datatype": 0}
     LD_LABEL = {"layer": 0, "texttype": 0}
     label_ports: bool = False
     port_width: float = 0.5
