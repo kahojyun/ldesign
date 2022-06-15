@@ -8,7 +8,7 @@ from typing import Any, Literal, TypedDict, Union, overload
 import numpy
 from typing_extensions import Self
 
-__version__ = "0.8.2"
+__version__ = "0.8.3"
 
 Point = complex | tuple[float, float] | Sequence[float]
 EndTypes = (
@@ -1868,6 +1868,10 @@ class Label:
 
         Note that this example can only be correctly displayed in browsers
         with good support for text alignment in SVG images.
+
+    Notes:
+        Label anchor and transformations (rotation, magnification and
+        reflection) are not supported by the OASIS format.
     """
 
     anchor: AnchorType

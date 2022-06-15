@@ -4,7 +4,7 @@ channels:
   - defaults
 dependencies:
   - python=3.10
-  - gdstk=0.8.2
+  - gdstk=0.8.3
   - gdspy
   - numpy
   - scipy
