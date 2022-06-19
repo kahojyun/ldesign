@@ -599,9 +599,9 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
     def _make_bridge(self, point: complex, angle: float) -> None:
         cpw_args = self.options.cpw
         # FIXME add path options
-        bridge_len_sub = cpw_args.gap * 2 + cpw_args.width * 2 + 6
+        bridge_len_sub = cpw_args.gap * 2 + cpw_args.width + 6
         bridge = crossover.Bridge(
-            crossover.BridgeArgs(length_sub=bridge_len_sub, width_sub=7)
+            crossover.BridgeArgs(length_sub=bridge_len_sub, width_sub=7), self.cfg
         )
         self.cpw.add_element(
             bridge,
@@ -725,7 +725,7 @@ class PathOpGenerator:
     def __init__(
         self,
         start: complex | elements.DockingPort,
-        radius: float | None = None,
+        start_radius: float | None = None,
         options: PathOptions | None = None,
     ) -> None:
         self.options = PathOptions() if options is None else options
@@ -733,9 +733,9 @@ class PathOpGenerator:
             start = start.copy()
             # rotate start port by pi to unify with other ports
             start.angle += math.pi
-        if radius is None:
-            radius = self.options.radius
-        self._ops = [SegmentOp(start, radius)]
+        if start_radius is None:
+            start_radius = self.options.radius
+        self._ops = [SegmentOp(start, start_radius)]
 
     def segment(
         self,
@@ -758,7 +758,7 @@ class PathOpGenerator:
     def extend(self, length: float) -> None:
         self._ops.append(ExtendOp(length))
 
-    def turn(self, angle: float, radius: float | None) -> None:
+    def turn(self, angle: float, radius: float | None = None) -> None:
         if radius is None:
             radius = self.options.radius
         self._ops.append(TurnOp(radius, angle))
@@ -856,41 +856,16 @@ def create_cpw_from_ops(
 if __name__ == "__main__":
     # logging.basicConfig(level=logging.DEBUG)
     config.use_preset_design()
-    p1 = -100 + 100j
-    a1 = -2
-    r1 = 50
-    p3 = 50 - 50j
-    a3 = -math.pi / 2
-    r3 = 49.99999
-    op_gen = PathOpGenerator(p1, r1)
-    op_gen.segment(p3, r3, a3)
-    op_gen.segment(200 - 50j)
-    op_gen.segment(300 - 300j)
-    points = [180 - 500j, 500 - 180j] * 10
-    points = np.cumsum(points) + 300 - 300j
-    for p in points:
-        op_gen.segment(p)
-        op_gen.auto_meander(100, 300, "auto", 0, 0, 10, None)
-    op_gen.turn(30, math.pi / 2)
-    op_gen.extend(300)
-    ops = op_gen.build()
-    ops = set_total_length(ops, 30000)
-
-    options = PathOptions(bridge_spacing=1000)
-    builder = CpwWaveguideBuilder(options, config.global_config)
-    builder.process_ops(ops)
-    lc = LengthTracker(None)
-    lc.process_ops(ops)
-    print(lc.total_length)
-    print(lc.op_lens)
-    print(sum(lc.op_lens))
-    print(len(lc.op_lens))
-    print(len(ops))
-    bp = BondPad()
     elem = elements.Element()
-    cpw = builder.build()
-    cpw = elem.add_element(cpw)
-    elem.add_element(bp, cpw.port_start, bp.port_line)
-    elem.add_element(bp, cpw.port_end, bp.port_line)
-    elem.flatten()
+    pathop_gen = PathOpGenerator(50 + 0j)
+    pathop_gen.segment(200 + 200j)
+    pathop_gen.segment(200 + 500j)
+    pathop_gen.auto_meander(100, 1000, "auto", 50, 50, 50, None)
+    pathop_gen.segment(500 + 200j)
+    pathop_gen.auto_meander(100, 1000, "auto", 50, 50, 50, None)
+    ops = pathop_gen.build()
+    cpw = CpwArgs(4, 2)
+    options = PathOptions(50, cpw, first_bridge=50, bridge_spacing=100)
+    path = create_cpw_from_ops(ops, total_length=4500, options=options)
+    elem.add_element(path)
     elem.view()

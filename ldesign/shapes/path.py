@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import gdstk
 import numpy as np
 from ldesign import config, elements
+import ldesign
 
 
 @dataclass
@@ -102,6 +103,54 @@ class FluxEnd(elements.Element):
         return self.ports["flux"]
 
 
+@dataclass
+class FluxEnd3DArgs:
+    cpw: CpwArgs = field(default_factory=CpwArgs)
+    square_width: float = 40
+    turn_radius: float = 8
+    extend_length: float = 2
+    end_gap: float = 4
+
+
+class FluxEnd3D(elements.Element):
+    def __init__(
+        self, args: FluxEnd3DArgs | None = None, config: config.Config | None = None
+    ):
+        super().__init__(config=config)
+        if args is None:
+            args = FluxEnd3DArgs()
+        self.args = args
+        self._init_cell()
+
+    def _init_cell(self):
+        args = self.args
+        r = args.turn_radius
+        ext = args.extend_length
+        w = args.square_width
+        cpw = args.cpw
+        options = ldesign.path.PathOptions(radius=r, cpw=cpw, parent_element=self)
+        gen = ldesign.path.PathOpGenerator((r + ext) * 1j, options=options)
+        gen.segment(-w * 1j)
+        gen.segment(w - w * 1j)
+        gen.segment(w - r * 1j, angle=math.pi / 2)
+        gen.segment(cpw.width + cpw.gap * 2 + args.end_gap + r * 1j, angle=math.pi / 2)
+        gen.extend(ext)
+        ops = gen.build()
+        self.add_element(
+            ldesign.path.create_cpw_from_ops(ops, options=options, cfg=self.config)
+        )
+        self.create_port("line", (r + ext) * 1j, math.pi / 2)
+        self.create_port("flux", w / 2 - w / 2 * 1j, -math.pi / 2)
+
+    @property
+    def port_line(self):
+        return self.ports["line"]
+
+    @property
+    def port_flux(self):
+        return self.ports["flux"]
+
+
 class StraightCpw(elements.CpwWaveguide):
     def __init__(
         self,
@@ -128,9 +177,4 @@ class StraightCpw(elements.CpwWaveguide):
 
 if __name__ == "__main__":
     config.use_preset_design()
-    elem = OpenEnd(CpwArgs())
-    elem.view()
-    elem = FluxEnd()
-    elem.view()
-    elem = StraightCpw(100)
-    elem.view()
+    FluxEnd3D().view()

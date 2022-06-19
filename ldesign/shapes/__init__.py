@@ -4,6 +4,7 @@ from . import (
     crossover,
     floating_qubit,
     junction,
+    marker,
     path,
     tpad,
     upad,

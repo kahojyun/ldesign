@@ -6,6 +6,7 @@ import numpy as np
 
 from ldesign import config, elements
 from ldesign.shapes import bondpad, boundary, path
+from ldesign.shapes.marker import MarkerArgs
 
 
 class Chip24Ports(elements.Element):
@@ -16,7 +17,9 @@ class Chip24Ports(elements.Element):
 
     def __init__(self, config: config.Config | None = None) -> None:
         super().__init__(config=config)
-        boundary_args = boundary.BoundaryArgs(width=self._WIDTH, star=True)
+        boundary_args = boundary.BoundaryArgs(
+            width=self._WIDTH, corner_marker=MarkerArgs(star=True)
+        )
         b = boundary.Boundary(boundary_args, config)
         self.add_element(b)
 
