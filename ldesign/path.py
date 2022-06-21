@@ -10,11 +10,9 @@ from itertools import product
 from typing import Literal, Sequence, final
 
 import gdstk
-import numpy as np
 
 from ldesign import config, elements, planning
 from ldesign.shapes import crossover
-from ldesign.shapes.bondpad import BondPad
 from ldesign.shapes.crossover import CrossoverArgs
 from ldesign.shapes.path import CpwArgs
 from ldesign.utils import to_complex
@@ -89,6 +87,52 @@ class AutoMeanderOp(PathOp):
             self.out_position,
             self.direction,
         )
+        return length
+
+
+@dataclass
+class BalancedMeanderOp(PathOp):
+    radius: float
+    n_turn: int
+    alignment: Literal["left", "right", "center"]
+    length: float | None = None
+    width: float | None = None
+    depth: float | None = None
+    first_turn: Literal["left", "right"] = "right"
+
+    def __post_init__(self):
+        if self.depth is not None and self.calc_min_depth() > self.depth:
+            raise ValueError("depth")
+        if self.width is not None and self.calc_min_width() > self.width:
+            raise ValueError("width")
+        if self.alignment != "center" and self.n_turn % 2 != 1:
+            raise ValueError("n_turn")
+
+    def calc_min_depth(self) -> float:
+        return (self.n_turn + 1) * self.radius * 2
+
+    def calc_min_width(self) -> float:
+        if self.alignment == "center":
+            return 4 * self.radius
+        return 2 * self.radius
+
+    def calc_min_length(self) -> float:
+        min_depth = self.calc_min_depth()
+        length = math.pi / 2 * min_depth
+        if self.depth is not None:
+            length += self.depth - min_depth
+        if self.alignment == "center":
+            length += (self.n_turn - 1) * 2 * self.radius
+        return length
+
+    def calc_max_length(self) -> float:
+        if self.width is None:
+            return math.inf
+        length = self.calc_min_length()
+        if self.alignment == "center":
+            length += self.n_turn * (self.width - self.calc_min_width())
+        else:
+            length += (self.n_turn + 1) * (self.width - self.calc_min_width())
         return length
 
 
@@ -341,6 +385,8 @@ class _BaseOpVisitor:
                 self._process_op_crossover(next_op, pending_ops)
             case AutoMeanderOp():
                 self._process_op_automeander(next_op, pending_ops)
+            case BalancedMeanderOp():
+                self._process_op_balancedmeander(next_op, pending_ops)
             case _:
                 raise TypeError(f"Unknown op {next_op=}")
 
@@ -510,6 +556,20 @@ class _BaseOpVisitor:
                 next_op.out_position - next_op.in_position + 1j * next_op.depth
             )
 
+    def _process_op_balancedmeander(
+        self,
+        next_op: BalancedMeanderOp,
+        pending_ops: deque[PathOp],
+        update_pos: bool = True,
+    ) -> None:
+        if update_pos:
+            if self.current_angle is None:
+                self.current_angle = 0
+            depth = next_op.depth
+            if depth is None:
+                depth = next_op.calc_min_depth()
+            self.current_pos += cmath.rect(depth, self.current_angle)
+
     def _transform_port(self, port: elements.DockingPort) -> elements.DockingPort:
         return port.get_transformed_port(self.options.parent_element)
 
@@ -564,6 +624,19 @@ class LengthTracker(_BaseOpVisitor):
         update_pos: bool = True,
     ) -> None:
         super()._process_op_automeander(next_op, pending_ops, update_pos)
+        length = next_op.length
+        if length is None:
+            length = 0
+        self.op_lens.append(length)
+        self.total_length += length
+
+    def _process_op_balancedmeander(
+        self,
+        next_op: BalancedMeanderOp,
+        pending_ops: deque[PathOp],
+        update_pos: bool = True,
+    ) -> None:
+        super()._process_op_balancedmeander(next_op, pending_ops, update_pos)
         length = next_op.length
         if length is None:
             length = 0
@@ -701,6 +774,45 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
                         raise Exception
             super()._process_op_automeander(next_op, pending_ops, False)
 
+    def _process_op_balancedmeander(
+        self,
+        next_op: BalancedMeanderOp,
+        pending_ops: deque[PathOp],
+        update_pos: bool = True,
+    ) -> None:
+        if next_op.length is None:
+            self.current_path = None
+            super()._process_op_balancedmeander(next_op, pending_ops, update_pos)
+        else:
+            min_len = next_op.calc_min_length()
+            if next_op.alignment == "center":
+                width = (
+                    next_op.length - min_len
+                ) / next_op.n_turn + next_op.calc_min_width()
+            else:
+                width = (next_op.length - min_len) / (
+                    next_op.n_turn + 1
+                ) + next_op.calc_min_width()
+            commands = planning.plan_balanced_meander(
+                next_op.radius,
+                width,
+                next_op.n_turn,
+                next_op.alignment,
+                next_op.first_turn,
+            )
+            if next_op.depth is not None:
+                final_len = next_op.depth - next_op.calc_min_depth()
+                commands.append(("e", final_len))
+            for c in commands:
+                match c:
+                    case ("a", int() | float() as radius, int() | float() as angle):
+                        self._turn_inner(radius, angle)
+                    case ("e", int() | float() as length):
+                        self._extend_inner(length)
+                    case _:
+                        raise Exception
+            super()._process_op_balancedmeander(next_op, pending_ops, False)
+
     def build(self) -> elements.CpwWaveguide:
         self._ensure_started()
         if self.start_angle is None or self.current_angle is None:
@@ -792,11 +904,31 @@ class PathOpGenerator:
         direction: Literal["left", "right", "auto"],
         in_pos: float,
         out_pos: float,
-        radius: float,
-        length: float | None,
+        radius: float | None = None,
+        length: float | None = None,
     ) -> None:
+        if radius is None:
+            radius = self.options.radius
         self._ops.append(
             AutoMeanderOp(width, depth, direction, in_pos, out_pos, radius, length)
+        )
+
+    def balanced_meander(
+        self,
+        n_turn: int,
+        alignment: Literal["left", "right", "center"],
+        width: float | None = None,
+        depth: float | None = None,
+        first_turn: Literal["left", "right"] = "right",
+        radius: float | None = None,
+        length: float | None = None,
+    ) -> None:
+        if radius is None:
+            radius = self.options.radius
+        self._ops.append(
+            BalancedMeanderOp(
+                radius, n_turn, alignment, length, width, depth, first_turn
+            )
         )
 
     def build(self) -> list[PathOp]:
@@ -812,7 +944,7 @@ def set_total_length(
     meander_len_max = 0
     for op in ops:
         match op:
-            case AutoMeanderOp(length=None):
+            case AutoMeanderOp(length=None) | BalancedMeanderOp(length=None):
                 meander_len_min += op.calc_min_length()
                 meander_len_max += op.calc_max_length()
     if not (meander_len_min <= total_length - lt.total_length <= meander_len_max):
@@ -824,7 +956,7 @@ def set_total_length(
     new_ops = []
     for op in ops:
         match op:
-            case AutoMeanderOp(length=None):
+            case AutoMeanderOp(length=None) | BalancedMeanderOp(length=None):
                 len_min = op.calc_min_length()
                 len_max = op.calc_max_length()
                 new_len = min(len_max, len_min + len_left)
@@ -860,12 +992,14 @@ if __name__ == "__main__":
     pathop_gen = PathOpGenerator(50 + 0j)
     pathop_gen.segment(200 + 200j)
     pathop_gen.segment(200 + 500j)
-    pathop_gen.auto_meander(100, 1000, "auto", 50, 50, 50, None)
+    # pathop_gen.auto_meander(100, 1000, "auto", 50, 50, 50, None)
+    pathop_gen.balanced_meander(4, "right", 500)
     pathop_gen.segment(500 + 200j)
-    pathop_gen.auto_meander(100, 1000, "auto", 50, 50, 50, None)
+    # pathop_gen.auto_meander(100, 1000, "auto", 50, 50, 50, None)
+    pathop_gen.balanced_meander(4, "center", first_turn="left")
     ops = pathop_gen.build()
-    cpw = CpwArgs(4, 2)
-    options = PathOptions(50, cpw, first_bridge=50, bridge_spacing=100)
+    cpw = CpwArgs(10, 6)
+    options = PathOptions(50, cpw, first_bridge=4499.9, bridge_spacing=100)
     path = create_cpw_from_ops(ops, total_length=4500, options=options)
     elem.add_element(path)
     elem.view()

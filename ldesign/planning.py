@@ -205,6 +205,42 @@ def plan_standard_meander(
     )
 
 
+def plan_balanced_meander(
+    radius: float,
+    width: float,
+    n_turn: int,
+    alignment: Literal["left", "right", "center"],
+    first_turn: Literal["left", "right"],
+) -> list[tuple]:
+    if alignment == "left":
+        first_turn = "right"
+    elif alignment == "right":
+        first_turn = "left"
+    cmds: list[tuple] = []
+    if first_turn == "left":
+        cmds.append(("a", radius, math.pi / 2))
+        turn_sign = -1
+    else:
+        cmds.append(("a", radius, -math.pi / 2))
+        turn_sign = 1
+    if alignment == "center":
+        cmds.append(("e", width / 2 - 2 * radius))
+    else:
+        cmds.append(("e", width - 2 * radius))
+    for _ in range(n_turn - 1):
+        cmds.append(("a", radius, turn_sign * math.pi))
+        cmds.append(("e", width - 2 * radius))
+        turn_sign = -turn_sign
+    cmds.append(("a", radius, turn_sign * math.pi))
+    turn_sign = -turn_sign
+    if alignment == "center":
+        cmds.append(("e", width / 2 - 2 * radius))
+    else:
+        cmds.append(("e", width - 2 * radius))
+    cmds.append(("a", radius, turn_sign * math.pi / 2))
+    return cmds
+
+
 def _get_standard_meander_commands(
     n: int,
     ratio: float,
