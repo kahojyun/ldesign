@@ -137,8 +137,9 @@ class Element:
     # Transformation relative to parent
     transformation: Transformation
     cell: gdstk.Cell
-    children: list["Element"]
-    parent: Optional["Element"]
+    children: list[Element]
+    labeled_children: dict[str, Element]
+    parent: Optional[Element]
     config: Config
     ports: dict[str, DockingPort]
     _prefix_count: ClassVar[defaultdict] = defaultdict(int)
@@ -159,6 +160,7 @@ class Element:
         self.cell = gdstk.Cell(name)
         self.ports = {}
         self.children = []
+        self.labeled_children = {}
         self.transformation = Transformation()
         self.parent = None
         self.config = config
@@ -197,6 +199,11 @@ class Element:
             new_c = c.copy()
             new_c.parent = new
             new.children.append(new_c)
+        new.labeled_children = {}
+        for k, c in self.labeled_children.items():
+            new_c = c.copy()
+            new_c.parent = new
+            new.labeled_children[k] = c
         return new
 
     def create_port(self, name: str, point: complex, angle: float):
@@ -235,8 +242,16 @@ class Element:
         ref_port: DockingPort | None = None,
         elem_port: DockingPort | None = None,
         transformation: Transformation | None = None,
+        label: str | None = None,
         match_angle: bool = True,
+        copy: bool = True,
     ) -> TE:
+        if not copy and element.parent is not None:
+            raise ValueError(
+                "Trying to add element without copying but element already has a parent."
+            )
+        if label is not None and label in self.labeled_children:
+            raise ValueError("Duplicate label", label)
         transformations = []
         # 1. align point
         if ref_port is None:
@@ -279,10 +294,16 @@ class Element:
                 element.cell, translation, rotation, magnification, x_reflection
             )
         )
-        transformed_element = element.copy()
+        if copy:
+            transformed_element = element.copy()
+        else:
+            transformed_element = element
         transformed_element.transformation = total_transformation
         transformed_element.parent = self
-        self.children.append(transformed_element)
+        if label is not None:
+            self.labeled_children[label] = transformed_element
+        else:
+            self.children.append(transformed_element)
         return transformed_element
 
     def flatten(self):
