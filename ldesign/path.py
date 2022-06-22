@@ -11,6 +11,7 @@ from typing import Literal, Sequence, final
 
 import gdstk
 
+import ldesign
 from ldesign import config, elements, planning
 from ldesign.shapes import crossover
 from ldesign.shapes.crossover import CrossoverArgs
@@ -61,6 +62,28 @@ class TurnOp(PathOp):
 @dataclass
 class CrossoverOp(PathOp):
     crossover: CrossoverArgs = field(default_factory=CrossoverArgs)
+
+
+@dataclass
+class ElementOp(PathOp):
+    element: elements.Element
+    port_in: elements.DockingPort
+    port_out: elements.DockingPort
+    copy: bool
+    label: str | None = None
+    length: float | None = None
+
+
+@dataclass
+class JumpOp(PathOp):
+    port: elements.DockingPort
+    length: float | None = None
+
+
+@dataclass
+class SetStateOp(PathOp):
+    bridge_spacing: float | None
+    bridge_len_tracker: float | None
 
 
 @dataclass
@@ -387,6 +410,12 @@ class _BaseOpVisitor:
                 self._process_op_automeander(next_op, pending_ops)
             case BalancedMeanderOp():
                 self._process_op_balancedmeander(next_op, pending_ops)
+            case ElementOp():
+                self._process_op_element(next_op, pending_ops)
+            case JumpOp():
+                self._process_op_jump(next_op, pending_ops)
+            case SetStateOp():
+                self._process_op_setstate(next_op, pending_ops)
             case _:
                 raise TypeError(f"Unknown op {next_op=}")
 
@@ -543,6 +572,31 @@ class _BaseOpVisitor:
             next_op.crossover.total_length, self.current_angle
         )
 
+    def _process_op_element(
+        self, next_op: ElementOp, pending_ops: deque[PathOp]
+    ) -> None:
+        if self.current_angle is None:
+            self.current_angle = 0
+        port_in = next_op.port_in.get_transformed_port(next_op.element)
+        port_out = next_op.port_out.get_transformed_port(next_op.element)
+        element_turn_angle = self.current_angle - port_in.angle - math.pi
+        self.current_pos += (port_out.point - port_in.point) * cmath.rect(
+            1, element_turn_angle
+        )
+        self.current_angle += port_out.angle - port_in.angle - math.pi
+
+    def _process_op_jump(self, next_op: JumpOp, pending_ops: deque[PathOp]) -> None:
+        if self.current_angle is None:
+            self.current_angle = 0
+        port = next_op.port.get_transformed_port(self.options.parent_element)
+        self.current_pos = port.point
+        self.current_angle = port.angle
+
+    def _process_op_setstate(
+        self, next_op: SetStateOp, pending_ops: deque[PathOp]
+    ) -> None:
+        pass
+
     def _process_op_automeander(
         self,
         next_op: AutoMeanderOp,
@@ -613,9 +667,17 @@ class LengthTracker(_BaseOpVisitor):
         self, next_op: CrossoverOp, pending_ops: deque[PathOp]
     ) -> None:
         super()._process_op_crossover(next_op, pending_ops)
-        length = next_op.crossover.total_length
-        self.total_length += length
-        self.op_lens.append(length)
+        self._add_length(next_op.crossover.total_length)
+
+    def _process_op_element(
+        self, next_op: ElementOp, pending_ops: deque[PathOp]
+    ) -> None:
+        super()._process_op_element(next_op, pending_ops)
+        self._add_length(next_op.length)
+
+    def _process_op_jump(self, next_op: JumpOp, pending_ops: deque[PathOp]) -> None:
+        super()._process_op_jump(next_op, pending_ops)
+        self._add_length(next_op.length)
 
     def _process_op_automeander(
         self,
@@ -624,11 +686,7 @@ class LengthTracker(_BaseOpVisitor):
         update_pos: bool = True,
     ) -> None:
         super()._process_op_automeander(next_op, pending_ops, update_pos)
-        length = next_op.length
-        if length is None:
-            length = 0
-        self.op_lens.append(length)
-        self.total_length += length
+        self._add_length(next_op.length)
 
     def _process_op_balancedmeander(
         self,
@@ -637,7 +695,9 @@ class LengthTracker(_BaseOpVisitor):
         update_pos: bool = True,
     ) -> None:
         super()._process_op_balancedmeander(next_op, pending_ops, update_pos)
-        length = next_op.length
+        self._add_length(next_op.length)
+
+    def _add_length(self, length: float | None):
         if length is None:
             length = 0
         self.op_lens.append(length)
@@ -649,6 +709,8 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
     current_path: gdstk.RobustPath | None
     cfg: config.Config
     bridge_len_traker: float
+    bridge_spacing: float
+    _bridge: crossover.Bridge | None = None
 
     def __init__(
         self,
@@ -656,30 +718,33 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
         cfg: config.Config | None = None,
     ) -> None:
         super().__init__(options)
-        self.cpw = elements.CpwWaveguide()
         self.current_path = None
         if cfg is None:
             cfg = config.global_config
         self.cfg = cfg
+        self.cpw = elements.CpwWaveguide(cfg)
         if self.options.bridge_spacing is not None:
+            self.bridge_spacing = self.options.bridge_spacing
             if self.options.first_bridge is not None:
                 self.bridge_len_traker = self.options.first_bridge
             else:
                 self.bridge_len_traker = self.options.bridge_spacing
         else:
+            self.bridge_spacing = 0
             self.bridge_len_traker = 0
 
     def _make_bridge(self, point: complex, angle: float) -> None:
-        cpw_args = self.options.cpw
-        # FIXME add path options
-        bridge_len_sub = cpw_args.gap * 2 + cpw_args.width + 6
-        bridge = crossover.Bridge(
-            crossover.BridgeArgs(length_sub=bridge_len_sub, width_sub=7), self.cfg
-        )
+        if self._bridge is None:
+            cpw_args = self.options.cpw
+            # FIXME add path options
+            bridge_len_sub = cpw_args.gap * 2 + cpw_args.width + 6
+            self._bridge = crossover.Bridge(
+                crossover.BridgeArgs(length_sub=bridge_len_sub, width_sub=7), self.cfg
+            )
         self.cpw.add_element(
-            bridge,
+            self._bridge,
             elements.DockingPort(point, angle, self.cpw),
-            bridge.port_center,
+            self._bridge.port_center,
             elements.Transformation(rotation=math.pi / 2),
         )
 
@@ -689,12 +754,13 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
         v = point - self.current_pos
 
         if not is_zero_len(v):
-            if self.options.bridge_spacing is not None:
+            if self.bridge_spacing > 0:
                 # make bridge
                 left_len = abs(v)
+                self.bridge_len_traker = max(0, self.bridge_len_traker)
                 while left_len > self.bridge_len_traker:
                     left_len -= self.bridge_len_traker
-                    self.bridge_len_traker = self.options.bridge_spacing
+                    self.bridge_len_traker = self.bridge_spacing
                     bridge_point = point - v * left_len / abs(v)
                     bridge_angle = cmath.phase(v)
                     self._make_bridge(bridge_point, bridge_angle)
@@ -711,16 +777,17 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
                 current_angle = 0
             start_angle, final_angle = _get_arc_angle(current_angle, angle)
             self.current_path.arc(radius, start_angle, final_angle)
-            if self.options.bridge_spacing is not None:
+            if self.bridge_spacing > 0:
                 # make bridge
                 left_angle = abs(angle)
                 point = self.current_pos
                 turn_center = point + cmath.rect(
                     radius, current_angle + math.copysign(math.pi / 2, angle)
                 )
+                self.bridge_len_traker = max(0, self.bridge_len_traker)
                 while left_angle * radius > self.bridge_len_traker:
                     left_angle -= self.bridge_len_traker / radius
-                    self.bridge_len_traker = self.options.bridge_spacing
+                    self.bridge_len_traker = self.bridge_spacing
                     bridge_angle = (
                         current_angle + angle - math.copysign(left_angle, angle)
                     )
@@ -744,6 +811,41 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
         )
         self.current_path = None
         super()._process_op_crossover(next_op, pending_ops)
+
+    def _process_op_element(
+        self, next_op: ElementOp, pending_ops: deque[PathOp]
+    ) -> None:
+        current_angle = self.current_angle
+        current_pos = self.current_pos
+        if current_angle is None:
+            current_angle = 0
+        ref_port = elements.DockingPort(current_pos, current_angle, self.cpw)
+        self.cpw.add_element(
+            next_op.element,
+            ref_port,
+            next_op.port_in,
+            label=next_op.label,
+            copy=next_op.copy,
+        )
+        self.current_path = None
+        if next_op.length is not None:
+            self.bridge_len_traker -= next_op.length
+        super()._process_op_element(next_op, pending_ops)
+
+    def _process_op_jump(self, next_op: JumpOp, pending_ops: deque[PathOp]) -> None:
+        self.current_path = None
+        if next_op.length is not None:
+            self.bridge_len_traker -= next_op.length
+        super()._process_op_jump(next_op, pending_ops)
+
+    def _process_op_setstate(
+        self, next_op: SetStateOp, pending_ops: deque[PathOp]
+    ) -> None:
+        if next_op.bridge_len_tracker is not None:
+            self.bridge_len_traker = next_op.bridge_len_tracker
+        if next_op.bridge_spacing is not None:
+            self.bridge_spacing = next_op.bridge_spacing
+        super()._process_op_setstate(next_op, pending_ops)
 
     def _process_op_automeander(
         self,
@@ -897,6 +999,31 @@ class PathOpGenerator:
             )
         self._ops.append(CrossoverOp(crossover_args))
 
+    def add_element(
+        self,
+        element: elements.Element,
+        port_in: elements.DockingPort,
+        port_out: elements.DockingPort,
+        copy: bool,
+        label: str | None = None,
+        length: float | None = None,
+    ):
+        self._ops.append(ElementOp(element, port_in, port_out, copy, label, length))
+
+    def jump(
+        self,
+        port: elements.DockingPort,
+        length: float | None = None,
+    ):
+        self._ops.append(JumpOp(port, length))
+
+    def set_state(
+        self,
+        bridge_spacing: float | None = None,
+        bridge_len_tracker: float | None = None,
+    ):
+        self._ops.append(SetStateOp(bridge_spacing, bridge_len_tracker))
+
     def auto_meander(
         self,
         width: float,
@@ -989,17 +1116,22 @@ if __name__ == "__main__":
     # logging.basicConfig(level=logging.DEBUG)
     config.use_preset_design()
     elem = elements.Element()
+    testelem = ldesign.shapes.path.StraightCpw(40, CpwArgs(10, 50))
     pathop_gen = PathOpGenerator(50 + 0j)
     pathop_gen.segment(200 + 200j)
     pathop_gen.segment(200 + 500j)
     # pathop_gen.auto_meander(100, 1000, "auto", 50, 50, 50, None)
-    pathop_gen.balanced_meander(4, "right", 500)
+    pathop_gen.balanced_meander(5, "right", 500)
     pathop_gen.segment(500 + 200j)
     # pathop_gen.auto_meander(100, 1000, "auto", 50, 50, 50, None)
+    pathop_gen.add_element(
+        testelem, testelem.port_start, testelem.port_end, True, "coupler", 40
+    )
+    pathop_gen.set_state(bridge_len_tracker=10)
     pathop_gen.balanced_meander(4, "center", first_turn="left")
     ops = pathop_gen.build()
     cpw = CpwArgs(10, 6)
-    options = PathOptions(50, cpw, first_bridge=4499.9, bridge_spacing=100)
+    options = PathOptions(50, cpw, first_bridge=50, bridge_spacing=100)
     path = create_cpw_from_ops(ops, total_length=4500, options=options)
     elem.add_element(path)
     elem.view()
