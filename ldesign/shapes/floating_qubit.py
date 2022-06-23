@@ -5,6 +5,7 @@ import gdstk
 import numpy as np
 
 from ldesign import config, elements
+import ldesign.chips
 
 
 @dataclass
@@ -129,8 +130,69 @@ class FloatingXmon(elements.Element):
     def port_e(self):
         return self.ports["e"]
 
+@dataclass
+class HcouplerArgs:
+    inner_width: float = 100
+    inner_length: float = 858
+    outer_width: float = 180
+    outer_length: float = 898
+        
+    bottleneck_width: float = 40
+    bottleneck_length: float = 742
+        
+    fillet_radius: float = 10
+
+
+class Hcoupler(elements.Element):
+    def __init__(
+        self, args: HcouplerArgs | None = None, config: config.Config | None = None
+    ):
+        super().__init__(config=config)
+        if args is None:
+            args = HcouplerArgs()
+        self.args = args
+        self._init_cell()
+
+    def _init_cell(self):
+        c = self.config
+        args = self.args
+        v_inner = args.inner_length+1j*args.inner_width
+        inner = gdstk.rectangle(-v_inner/2, v_inner/2)
+        
+        cut_top =  gdstk.rectangle(-args.bottleneck_length/2 + 1j*args.bottleneck_width/2, args.bottleneck_length/2+1j*args.inner_width/2)
+        cut_bot =  gdstk.rectangle(-args.bottleneck_length/2 - 1j*args.inner_width/2, args.bottleneck_length/2-1j*args.bottleneck_width/2)
+        inner = gdstk.boolean(inner, [cut_top,cut_bot], "not", **c.LD_AL_INNER)
+        for p in inner:
+            p.fillet(args.fillet_radius)
+        
+        v_outer = args.outer_length+1j*args.outer_width
+        outer = gdstk.rectangle(-v_outer/2, v_outer/2, **c.LD_AL_OUTER)
+#         v_sq = args.outer_square_width*(1+1j)
+#         sq = gdstk.rectangle(-v_sq/2, v_sq/2).rotate(math.pi / 4)
+#         outer = gdstk.boolean(outer, sq, "or", **c.LD_AL_OUTER)
+#         for p in outer:
+        outer.fillet(args.fillet_radius)
+        outer = gdstk.boolean(outer, inner, "not", **c.LD_AL_OUTER)
+        self.cell.add(*inner, *outer)
+
+        self.create_port("w", -0.5*args.outer_length+0j, math.pi)
+        self.create_port("e", 0.5*args.outer_length+0j, 0)
+
+    @property
+    def port_w(self):
+        return self.ports["w"]
+
+    @property
+    def port_e(self):
+        return self.ports["e"]
 
 if __name__ == "__main__":
     config.use_preset_design()
+    # chip = ldesign.chips.Chip24Ports()
+    # elem = FloatingXmon()
+    # chip.add_element(elem, elements.DockingPort(5000+5000j), transformation=elements.Transformation(rotation=math.pi/4))
+    # chip.view()
+
     elem = FloatingXmon()
+    # elem.write_gds("demo.gds", test_region=(-1000-1000j, 1000+1000j))
     elem.view()
