@@ -1,7 +1,11 @@
+import cmath
+import copy
 import math
 from dataclasses import dataclass
+from itertools import product
 
 import gdstk
+import ldesign
 from ldesign import config, elements
 
 
@@ -77,13 +81,16 @@ class Marker(elements.Element):
 
 @dataclass
 class FlipChipMarkerArgs:
-    outer_marker_size: float = 612
-    outer_marker_arm_width: float = 10
-    inner_marker_gap: float = 2
-    inner_marker_size: float = 8
-    inner_marker_arm_width: float = 1
-    star: bool = False
-    star_cut_size: float | None = None
+    n_tick: int = 6
+    major_tick_width: float = 4.5
+    major_tick_length: float = 44
+    minor_tick_width: float = 4.5
+    minor_tick_length: float = 22
+    first_tick: float = 20
+    tick_spacing: float = 20
+    cross_width: float = 60
+    cross_arm: float = 4
+    cross_pos: float = 40
 
 
 class FlipChipMarker(elements.Element):
@@ -91,20 +98,61 @@ class FlipChipMarker(elements.Element):
         self,
         args: FlipChipMarkerArgs | None = None,
         config: config.Config | None = None,
+        config2: config.Config | None = None,
     ):
         super().__init__(config=config)
         if args is None:
             args = FlipChipMarkerArgs()
         self.args = args
+        if config2 is None:
+            config2 = ldesign.config.global_config
+        self.config2 = config2
         self._init_cell()
 
     def _init_cell(
         self,
     ):
         c = self.config
+        c2 = self.config2
         args = self.args
+        cross = gdstk.cross(0j, args.cross_width, args.cross_arm, **c2.LD_AL_OUTER)
+        v = args.cross_width * (1 + 1j)
+        rect = gdstk.rectangle(-v / 2, v / 2, **c.LD_AL_OUTER)
+        rect = gdstk.boolean(rect, cross, "not", **c.LD_AL_OUTER)
+        v = (args.cross_width / 2 + args.cross_pos) * (1 - 1j)
+        self.cell.add(cross.copy().translate(v))
+        self.cell.add(cross.copy().translate(-v))
+        for p in rect:
+            self.cell.add(p.copy().translate(v))
+            self.cell.add(p.copy().translate(-v))
+        v = args.major_tick_width + args.major_tick_length / 2 * 1j
+        major1 = gdstk.rectangle(0j, v, **c.LD_AL_OUTER)
+        major2 = gdstk.rectangle(0j, v.conjugate(), **c2.LD_AL_OUTER)
+        v = args.minor_tick_width + args.minor_tick_length / 2 * 1j
+        minor1 = gdstk.rectangle(0j, v, **c.LD_AL_OUTER)
+        minor2 = gdstk.rectangle(0j, v.conjugate(), **c2.LD_AL_OUTER)
+        for i, j in product(range(args.n_tick), range(4)):
+            a = math.pi / 2 * j
+            v = cmath.rect(args.first_tick + i * args.tick_spacing, a)
+            self.cell.add(major1.copy().transform(translation=v, rotation=a))
+            self.cell.add(major2.copy().transform(translation=v, rotation=a))
+            v = cmath.rect(args.first_tick + (i + 0.5) * args.tick_spacing, a)
+            self.cell.add(minor1.copy().transform(translation=v, rotation=a))
+            self.cell.add(minor2.copy().transform(translation=v, rotation=a))
 
 
 if __name__ == "__main__":
     config.use_preset_design()
-    Marker(MarkerArgs(star=True)).view()
+    base_config = copy.copy(config.global_config)
+    fc_config = copy.copy(base_config)
+    fc_config.LD_AL_OUTER = {"layer": 1, "datatype": 1}
+    fc_config.LD_AL_INNER = {"layer": 101, "datatype": 1}
+    fc_config.LD_BANDAGE = {"layer": 7, "datatype": 1}
+    fc_config.LD_JJ_PAD = {"layer": 6, "datatype": 1}
+    fc_config.LD_JJ = {"layer": 5, "datatype": 1}
+    fc_config.LD_BRIDGE_UNDER = {"layer": 4, "datatype": 1}
+    fc_config.LD_BRIDGE = {"layer": 3, "datatype": 1}
+    fc_config.LD_SUPPORT = {"layer": 99, "datatype": 1}
+    fc_config.LD_BRIDGE_VIA = {"layer": 100, "datatype": 1}
+    fc_config.LD_LABEL = {"layer": 0, "texttype": 0}
+    FlipChipMarker(config=base_config, config2=fc_config).view()

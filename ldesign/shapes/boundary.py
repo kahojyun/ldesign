@@ -84,6 +84,11 @@ class Boundary(elements.Element):
             boundary = gdstk.boolean(boundary, masks, "not", **ld_outer)
 
         self.cell.add(*boundary)
+        self.create_port("center", width / 2 + height / 2 * 1j, 0)
+
+    @property
+    def port_center(self):
+        return self.ports["center"]
 
 
 if __name__ == "__main__":

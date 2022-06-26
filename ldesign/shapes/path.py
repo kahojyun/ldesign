@@ -2,9 +2,9 @@ import math
 from dataclasses import dataclass, field
 
 import gdstk
+import ldesign
 import numpy as np
 from ldesign import config, elements
-import ldesign
 
 
 @dataclass
@@ -110,6 +110,8 @@ class FluxEnd3DArgs:
     turn_radius: float = 8
     extend_length: float = 2
     end_gap: float = 4
+    slant_len: float | None = None
+    cut_ground: bool = False
 
 
 class FluxEnd3D(elements.Element):
@@ -129,18 +131,34 @@ class FluxEnd3D(elements.Element):
         w = args.square_width
         cpw = args.cpw
         options = ldesign.path.PathOptions(radius=r, cpw=cpw, parent_element=self)
-        gen = ldesign.path.PathOpGenerator((r + ext) * 1j, options=options)
+        if args.slant_len is None:
+            gen = ldesign.path.PathOpGenerator((r + ext) * 1j, options=options)
+        else:
+            gen = ldesign.path.PathOpGenerator(
+                (r + args.slant_len) * (-1 + 1j), options=options
+            )
+            gen.segment(0j)
         gen.segment(-w * 1j)
         gen.segment(w - w * 1j)
         gen.segment(w - r * 1j, angle=math.pi / 2)
         gen.segment(cpw.width + cpw.gap * 2 + args.end_gap + r * 1j, angle=math.pi / 2)
         gen.extend(ext)
         ops = gen.build()
-        self.add_element(
-            ldesign.path.create_cpw_from_ops(ops, options=options, cfg=self.config)
-        )
-        self.create_port("line", (r + ext) * 1j, math.pi / 2)
+        line = ldesign.path.create_cpw_from_ops(ops, options=options, cfg=self.config)
+        line = self.add_element(line)
+        line_port = line.port_start.get_transformed_port(self)
+        self.create_port("line", line_port.point, line_port.angle)
         self.create_port("flux", w / 2 - w / 2 * 1j, -math.pi / 2)
+        if args.cut_ground:
+            ew = cpw.width / 2 + cpw.gap
+            cut = gdstk.rectangle(
+                (ew - self.config.tolerance) * (-1 + 1j),
+                (w + ew - self.config.tolerance) * (1 - 1j),
+                **self.config.LD_AL_OUTER
+            )
+            cut = cut.fillet(r + ew, tolerance=self.config.tolerance)
+            self.cell.add(cut)
+            self.flatten()
 
     @property
     def port_line(self):
@@ -177,4 +195,4 @@ class StraightCpw(elements.CpwWaveguide):
 
 if __name__ == "__main__":
     config.use_preset_design()
-    FluxEnd3D().view()
+    FluxEnd3D(FluxEnd3DArgs(slant_len=None, cut_ground=True)).view()

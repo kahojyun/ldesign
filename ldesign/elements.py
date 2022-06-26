@@ -203,7 +203,7 @@ class Element:
         for k, c in self.labeled_children.items():
             new_c = c.copy()
             new_c.parent = new
-            new.labeled_children[k] = c
+            new.labeled_children[k] = new_c
         return new
 
     def create_port(self, name: str, point: complex, angle: float):
@@ -306,50 +306,106 @@ class Element:
             self.children.append(transformed_element)
         return transformed_element
 
-    def flatten(self):
+    def flatten(self, chips: list[int] | None = None):
         cell = self.cell.flatten()
         ld_outer = self.config.LD_AL_OUTER
         ld_inner = self.config.LD_AL_INNER
-        outer = cell.get_polygons(**ld_outer)
-        inner = cell.get_polygons(**ld_inner)
-        outer = gdstk.boolean(outer, inner, "not", **ld_outer)
-        inner = gdstk.boolean(inner, [], "or", **ld_inner)
-        cell.filter([ld_outer["layer"]], [ld_outer["datatype"]], "and")
-        cell.filter([ld_inner["layer"]], [ld_inner["datatype"]], "and")
-        cell.add(*outer)
-        cell.add(*inner)
+        if chips is None:
+            outer = cell.get_polygons(**ld_outer)
+            inner = cell.get_polygons(**ld_inner)
+            outer = gdstk.boolean(outer, inner, "not", **ld_outer)
+            inner = gdstk.boolean(inner, [], "or", **ld_inner)
+            cell.filter([ld_outer["layer"]], [ld_outer["datatype"]], "and")
+            cell.filter([ld_inner["layer"]], [ld_inner["datatype"]], "and")
+            cell.add(*outer)
+            cell.add(*inner)
+        else:
+            for chip in chips:
+                outer = cell.get_polygons(layer=ld_outer["layer"], datatype=chip)
+                inner = cell.get_polygons(layer=ld_inner["layer"], datatype=chip)
+                outer = gdstk.boolean(
+                    outer, inner, "not", layer=ld_outer["layer"], datatype=chip
+                )
+                inner = gdstk.boolean(
+                    inner, [], "or", layer=ld_inner["layer"], datatype=chip
+                )
+                cell.filter([ld_outer["layer"]], [chip], "and")
+                cell.filter([ld_inner["layer"]], [chip], "and")
+                cell.add(*outer)
+                cell.add(*inner)
 
     def add_to_library(
         self,
         lib: gdstk.Library,
         flatten=True,
         test_region: tuple[complex, complex] | None = None,
+        chips: list[int] | None = None,
     ):
         if test_region is not None:
-            self.flatten()
-            temp_cell = gdstk.Cell(self.cell.name + "_temp")
-            rect = gdstk.rectangle(*test_region)
-            for poly in self.cell.get_polygons(include_paths=True):
-                temp_cell.add(
-                    *gdstk.boolean(
-                        rect, poly, "and", layer=poly.layer, datatype=poly.datatype
+            self.flatten(chips)
+            if chips is None:
+                temp_cell = gdstk.Cell(self.cell.name + "_temp")
+                rect = gdstk.rectangle(*test_region)
+                for poly in self.cell.get_polygons(include_paths=True):
+                    temp_cell.add(
+                        *gdstk.boolean(
+                            rect, poly, "and", layer=poly.layer, datatype=poly.datatype
+                        )
                     )
-                )
-            ld_outer = self.config.LD_AL_OUTER
-            ld_inner = self.config.LD_AL_INNER
-            outer_poly = temp_cell.get_polygons(**ld_outer)
-            base_al = gdstk.boolean(rect, outer_poly, "not", **ld_outer)
-            temp_cell.filter([ld_outer["layer"]], [ld_outer["datatype"]], "and")
-            temp_cell.filter([ld_inner["layer"]], [ld_inner["datatype"]], "and")
-            temp_cell.add(*base_al)
-            new_cell = gdstk.Cell(self.cell.name + "_test")
-            new_cell.add(gdstk.Reference(temp_cell, -test_region[0]))
-            new_cell.flatten()
-            lib.add(new_cell)
+                ld_outer = self.config.LD_AL_OUTER
+                ld_inner = self.config.LD_AL_INNER
+                outer_poly = temp_cell.get_polygons(**ld_outer)
+                base_al = gdstk.boolean(rect, outer_poly, "not", **ld_outer)
+                temp_cell.filter([ld_outer["layer"]], [ld_outer["datatype"]], "and")
+                temp_cell.filter([ld_inner["layer"]], [ld_inner["datatype"]], "and")
+                temp_cell.add(*base_al)
+                new_cell = gdstk.Cell(self.cell.name + "_test")
+                new_cell.add(gdstk.Reference(temp_cell, -test_region[0]))
+                new_cell.flatten()
+                lib.add(new_cell)
+            else:
+                for chip in chips:
+                    temp_cell = gdstk.Cell(self.cell.name + f"_temp_chip{chip}")
+                    rect = gdstk.rectangle(*test_region)
+                    for poly in self.cell.get_polygons(include_paths=True):
+                        if poly.datatype != chip:
+                            continue
+                        temp_cell.add(
+                            *gdstk.boolean(
+                                rect,
+                                poly,
+                                "and",
+                                layer=poly.layer,
+                                datatype=poly.datatype,
+                            )
+                        )
+                    ld_outer = self.config.LD_AL_OUTER
+                    ld_inner = self.config.LD_AL_INNER
+                    outer_poly = temp_cell.get_polygons(
+                        layer=ld_outer["layer"], datatype=chip
+                    )
+                    base_al = gdstk.boolean(
+                        rect, outer_poly, "not", layer=ld_outer["layer"], datatype=chip
+                    )
+                    temp_cell.filter([ld_outer["layer"]], [chip], "and")
+                    temp_cell.filter([ld_inner["layer"]], [chip], "and")
+                    temp_cell.add(*base_al)
+                    new_cell = gdstk.Cell(self.cell.name + f"_test_chip{chip}")
+                    new_cell.add(gdstk.Reference(temp_cell, -test_region[0]))
+                    new_cell.flatten()
+                    lib.add(new_cell)
             return
         if flatten:
-            self.flatten()
+            self.flatten(chips)
             lib.add(self.cell)
+            if chips is not None:
+                for chip in chips:
+                    new_cell = gdstk.Cell(self.cell.name + f"_chip{chip}")
+                    for poly in self.cell.get_polygons(include_paths=True):
+                        if poly.datatype != chip:
+                            continue
+                        new_cell.add(poly)
+                    lib.add(new_cell)
         else:
             lib.add(self.cell, *self.cell.dependencies(True))
 
@@ -368,9 +424,10 @@ class Element:
         test_region: tuple[complex, complex] | None = None,
         libname="library",
         max_points=4000,
+        chips: list[int] | None = None,
     ):
         lib = gdstk.Library(libname)
-        self.add_to_library(lib, flatten, test_region)
+        self.add_to_library(lib, flatten, test_region, chips)
         lib.write_gds(filename, max_points=max_points)
 
 

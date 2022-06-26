@@ -40,12 +40,46 @@ class SingleJunctionArgs:
     g_arm_direction: Literal["top", "left", "right"] = "top"
 
 
+def _get_default_squid_pad_args():
+    return JunctionPadArgs(base_width=6, jpad_side_margin=2)
+
+
+def _get_default_squid_arm_args():
+    return JunctionArmArgs(base_length=2, cross_length_inner=2, cross_length_outer=1.5)
+
+
 @dataclass
 class SquidArgs:
-    q_pad: JunctionPadArgs = field(default_factory=JunctionPadArgs)
-    g_pad: JunctionPadArgs = field(default_factory=JunctionPadArgs)
-    q_arm: JunctionArmArgs = field(default_factory=JunctionArmArgs)
-    g_arm: JunctionArmArgs = field(default_factory=JunctionArmArgs)
+    q_pad: JunctionPadArgs = field(default_factory=_get_default_squid_pad_args)
+    g_pad: JunctionPadArgs = field(default_factory=_get_default_squid_pad_args)
+    q_arm: JunctionArmArgs = field(default_factory=_get_default_squid_arm_args)
+    g_arm: JunctionArmArgs = field(default_factory=_get_default_squid_arm_args)
+    j_width1: float = 0.2
+    j_width2: float = 0.2
+
+
+def _get_default_square_squid_pad_args():
+    return JunctionPadArgs(
+        base_width=3,
+        bandage_length=10,
+        bandage_top_margin=-4,
+        bandage_side_margin=0.5,
+        jpad_length=8,
+        jpad_top_margin=5,
+        jpad_side_margin=0.5,
+    )
+
+
+def _get_default_square_squid_arm_args():
+    return JunctionArmArgs(
+        base_length=10, cross_length_inner=4.75, cross_length_outer=2.25
+    )
+
+
+@dataclass
+class SquareSquidArgs:
+    pad: JunctionPadArgs = field(default_factory=_get_default_square_squid_pad_args)
+    arm: JunctionArmArgs = field(default_factory=_get_default_square_squid_arm_args)
     j_width1: float = 0.2
     j_width2: float = 0.2
 
@@ -231,11 +265,7 @@ class Squid(elements.Element):
     ):
         super().__init__(config=config)
         if args is None:
-            q_pad = JunctionPadArgs(base_width=6, jpad_side_margin=2)
-            q_arm = JunctionArmArgs(
-                base_length=2, cross_length_inner=2, cross_length_outer=1.5
-            )
-            args = SquidArgs(q_pad=q_pad, q_arm=q_arm)
+            args = SquidArgs()
         self.args = args
         self._init_cell()
 
@@ -297,8 +327,81 @@ class Squid(elements.Element):
         return (self.port_g_center.point - self.port_q_base.point).imag
 
 
+class SquareSquid(elements.Element):
+    def __init__(
+        self,
+        args: SquareSquidArgs | None = None,
+        config: config.Config | None = None,
+    ):
+        super().__init__(config=config)
+        if args is None:
+            args = SquareSquidArgs()
+        self.args = args
+        self._init_cell()
+
+    def _init_cell(
+        self,
+    ):
+        args = self.args
+        pad = JunctionPad(args.pad, self.config)
+        pad1 = self.add_element(
+            pad, elements.DockingPort(0j, math.pi / 2, self), pad.port_base
+        )
+        pad_corner = pad1.port_jpad_top.as_reference(
+            -(args.pad.base_width / 2 + args.pad.jpad_side_margin) * 1j
+        )
+        arm1_args = dataclasses.replace(args.arm, cross_width=args.j_width1)
+        arm2_args = dataclasses.replace(args.arm, cross_width=args.j_width2)
+        arm1 = JunctionArm(arm1_args, self.config)
+        arm2 = JunctionArm(arm2_args, self.config)
+        a1 = self.add_element(
+            arm1,
+            pad_corner,
+            arm1.port_base,
+            transformation=elements.Transformation(arm1_args.base_width * 1.5j),
+        )
+        a2 = self.add_element(
+            arm2,
+            pad_corner,
+            arm2.port_base,
+            transformation=elements.Transformation(
+                -arm2_args.base_width * 1.5 + 0j, -math.pi / 2
+            ),
+        )
+        pc1 = a1.port_cross.get_transformed_port(self).point
+        pc2 = a2.port_cross.get_transformed_port(self).point
+        self.create_port("center", (pc1 + pc2) / 2, math.pi / 2)
+        a1 = self.add_element(
+            arm1,
+            a1.port_cross,
+            arm1.port_cross,
+            transformation=elements.Transformation(rotation=-math.pi / 2),
+        )
+        a2 = self.add_element(
+            arm2,
+            a2.port_cross,
+            arm2.port_cross,
+            transformation=elements.Transformation(rotation=math.pi / 2),
+        )
+        self.add_element(
+            pad,
+            a2.port_base,
+            pad.port_jpad_top,
+            transformation=elements.Transformation(
+                (
+                    arm1_args.base_width * 1.5
+                    - (args.pad.base_width / 2 + args.pad.jpad_side_margin)
+                )
+                * 1j
+            ),
+        )
+
+    @property
+    def port_center(self):
+        return self.ports["center"]
+
+
 if __name__ == "__main__":
     config.use_preset_design()
-    elem = Squid(SquidArgs(j_width1=0.1, j_width2=0.3))
-    print(elem.total_height)
+    elem = SquareSquid(SquareSquidArgs(j_width1=0.2, j_width2=0.2))
     elem.view()
