@@ -169,21 +169,6 @@ class Element:
     def name(self) -> str:
         return self.cell.name
 
-    def __add__(self, other: Element):
-        if isinstance(other, Element):
-            new_elem = Element(prefix="CompositeElement")
-            new_elem.add_element(self)
-            new_elem.add_element(other)
-            return new_elem
-        else:
-            raise TypeError
-
-    def __iadd__(self, other: Element):
-        if isinstance(other, Element):
-            self.add_element(other)
-        else:
-            raise TypeError
-
     def __repr__(self):
         return f'{type(self).__name__}(name="{self.name}", transformation={self.transformation})'
 
