@@ -166,9 +166,15 @@ class JunctionArm(elements.Element):
             **self.config.LD_JJ,
         )
 
+        # If cross_width is odd in nm, shift 0.5nm
+        shift = 0
+        min_grid = self.config.precision / self.config.unit
+        if round(args.cross_width / min_grid) % 2 == 1:
+            shift = min_grid / 2
         cross = gdstk.rectangle(
-            args.cross_width / 2 + 0j,
+            args.cross_width / 2 + shift + 0j,
             -args.cross_width / 2
+            + shift
             + (args.cross_length_inner + args.cross_length_outer) * 1j,
             **self.config.LD_JJ,
         )

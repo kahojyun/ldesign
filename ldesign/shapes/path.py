@@ -169,6 +169,86 @@ class FluxEnd3D(elements.Element):
         return self.ports["flux"]
 
 
+@dataclass
+class FluxEndTriangleArgs:
+    cpw: CpwArgs = field(default_factory=CpwArgs)
+    tri_width: float = 31
+    gap_up: float = 2
+    gap_down: float = 4
+    line_width: float = 2
+
+
+class FluxEndTriangle(elements.Element):
+    def __init__(
+        self,
+        args: FluxEndTriangleArgs | None = None,
+        config: config.Config | None = None,
+    ):
+        super().__init__(config=config)
+        if args is None:
+            args = FluxEndTriangleArgs()
+        self.args = args
+        self._init_cell()
+
+    def _init_cell(self):
+        args = self.args
+        outer_points = [
+            args.cpw.gap + args.tri_width + args.gap_up * 1j,
+            args.cpw.gap + (args.gap_up + args.tri_width) * 1j,
+            -args.cpw.gap - args.cpw.width + (args.gap_up + args.tri_width) * 1j,
+            -args.cpw.gap - args.cpw.width - (args.line_width + args.gap_down) * 1j,
+            args.cpw.gap + args.tri_width - (args.line_width + args.gap_down) * 1j,
+        ]
+        inner = [
+            gdstk.rectangle(
+                args.cpw.gap + args.tri_width + 0j,
+                -args.cpw.gap - args.cpw.width - args.line_width * 1j,
+                **self.config.LD_AL_INNER
+            ),
+            gdstk.rectangle(
+                0j,
+                -args.cpw.width + (args.gap_up + args.tri_width) * 1j,
+                **self.config.LD_AL_INNER
+            ),
+        ]
+        inner = gdstk.boolean(inner, [], "or", **self.config.LD_AL_INNER)
+        outer = gdstk.Polygon(outer_points, **self.config.LD_AL_OUTER)
+        outer = gdstk.boolean(outer, inner, "not", **self.config.LD_AL_OUTER)
+        # self.cell.add(gdstk.Polygon(outer_points, **self.config.LD_AL_OUTER))
+        # self.cell.add(gdstk.rectangle(-args.cpw.width+0j, -args.cpw.gap-args.cpw.width+(args.gap_up+args.tri_width)*1j, **self.config.LD_AL_OUTER))
+        # self.cell.add(gdstk.rectangle(args.cpw.gap + args.tri_width - args.line_width*1j, -args.cpw.gap-args.cpw.width-(args.line_width+args.gap_down)*1j, **self.config.LD_AL_OUTER))
+        self.cell.add(*inner)
+        self.cell.add(*outer)
+
+        self.create_port(
+            "line",
+            -args.cpw.width / 2 + (args.gap_up + args.tri_width) * 1j,
+            math.pi / 2,
+        )
+        self.create_port(
+            "flux",
+            (args.cpw.gap + args.tri_width + args.gap_up) * (1 + 1j) / 4,
+            -math.pi / 2,
+        )
+        self.create_port(
+            "flux45",
+            (args.cpw.gap + args.tri_width + args.gap_up) * (1 + 1j) / 3,
+            -math.pi / 4,
+        )
+
+    @property
+    def port_line(self):
+        return self.ports["line"]
+
+    @property
+    def port_flux(self):
+        return self.ports["flux"]
+
+    @property
+    def port_flux45(self):
+        return self.ports["flux45"]
+
+
 class StraightCpw(elements.CpwWaveguide):
     def __init__(
         self,
@@ -195,4 +275,5 @@ class StraightCpw(elements.CpwWaveguide):
 
 if __name__ == "__main__":
     config.use_preset_design()
-    FluxEnd3D(FluxEnd3DArgs(slant_len=None, cut_ground=True)).view()
+    # FluxEnd3D(FluxEnd3DArgs(slant_len=None, cut_ground=True)).view()
+    FluxEndTriangle().view()

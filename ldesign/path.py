@@ -6,13 +6,13 @@ import logging
 import math
 from collections import deque
 from dataclasses import dataclass, field
-from itertools import product
+from itertools import pairwise, product
 from typing import Literal, Sequence, final
 
 import gdstk
 
 import ldesign
-from ldesign import config, elements, planning
+from ldesign import config, elements, planning, utils
 from ldesign.shapes import crossover
 from ldesign.shapes.crossover import CrossoverArgs
 from ldesign.shapes.path import CpwArgs
@@ -20,7 +20,7 @@ from ldesign.utils import to_complex
 
 logger = logging.getLogger(__name__)
 LEN_ERR = 1e-4
-ANGLE_ERR = 1e-5
+ANGLE_ERR = 1e-7
 
 
 @dataclass
@@ -279,6 +279,8 @@ def _solve_to_two_circle(
 
 def _get_turn_angle(start: float, end: float, sign: float) -> float:
     ans = (end - start) % (2 * math.pi)
+    if is_zero_angle(ans) or is_zero_angle(ans - math.tau):
+        return 0
     if sign > 0:
         return ans
     if ans > 0:
@@ -1057,6 +1059,18 @@ class PathOpGenerator:
                 radius, n_turn, alignment, length, width, depth, first_turn
             )
         )
+
+    def segment_by_intersect(
+        self,
+        ports: Sequence[elements.DockingPort],
+        radius: float | None = None,
+        check_direction=False,
+    ):
+        for p1, p2 in pairwise(ports):
+            tp1 = p1.get_transformed_port(self.options.parent_element)
+            tp2 = p2.get_transformed_port(self.options.parent_element)
+            point = utils.find_intersection(tp1, tp2, check_direction)
+            self.segment(point, radius)
 
     def build(self) -> list[PathOp]:
         return list(self._ops)

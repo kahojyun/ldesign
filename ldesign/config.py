@@ -17,6 +17,8 @@ class Config:
     port_width: float = 0.5
     port_length: float = 2
     tolerance: float = 0.01
+    unit: float = 1e-6
+    precision: float = 1e-9
 
 
 global_config = Config()
