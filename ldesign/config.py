@@ -5,6 +5,7 @@ from dataclasses import dataclass
 class Config:
     LD_AL_INNER = {"layer": 101, "datatype": 0}
     LD_AL_OUTER = {"layer": 1, "datatype": 0}
+    LD_AL_TRAP = {"layer": 2, "datatype": 0}
     LD_BANDAGE = {"layer": 7, "datatype": 0}
     LD_JJ_PAD = {"layer": 6, "datatype": 0}
     LD_JJ = {"layer": 5, "datatype": 0}

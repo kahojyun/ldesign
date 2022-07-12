@@ -60,13 +60,13 @@ class Chip24Ports(elements.Element):
 class Chip96Ports(elements.Element):
     _WIDTH = 32000
     _PORT_SPACE = 1200
-    _PORT_MARGIN = 1000
+    _PORT_MARGIN = 1100 + 350 - 285
     _PORT_N = 96
 
     def __init__(self, config: config.Config | None = None) -> None:
         super().__init__(config=config)
         boundary_args = boundary.BoundaryArgs(
-            width=self._WIDTH, side_marker_n=1, edge_width=400
+            width=self._WIDTH, side_marker_n=1, edge_width=560
         )
         b = boundary.Boundary(boundary_args, config)
         self.add_element(b)
