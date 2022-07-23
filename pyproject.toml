@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ldesign"
+authors = [
+  { name="Jiahao Yuan", email="kaho0769@qq.com" },
+]
+description = "Layout design tool for superconducting circuits based on gdstk."
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["layout", "gdsii"]
+license = {file = "LICENSE"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "gdstk ~= 0.8.3",
+    "gdspy",
+    "numpy",
+    "scipy",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = ["black"]
+
+[project.urls]
+"Homepage" = "https://github.com/kahojyun/ldesign"
+"Bug Tracker" = "https://github.com/kahojyun/ldesign/issues"
+
+[tool.setuptools_scm]
+write_to = "src/ldesign/_version.py"
