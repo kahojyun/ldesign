@@ -35,19 +35,19 @@ class BondPad(elements.Element):
         trans_len = self.args.trans_len
         end_gap = self.args.end_gap
         ld_inner = self.config.LD_AL_INNER
-        ld_outer = self.config.LD_AL_OUTER
-        outer = (
-            gdstk.FlexPath((0, 0), line_gap * 2 + line_width, **ld_outer)
+        ld_gap = self.config.LD_AL_GAP
+        al_gap_poly = (
+            gdstk.FlexPath((0, 0), line_gap * 2 + line_width, **ld_gap)
             .horizontal(trans_len, width=pad_gap * 2 + pad_width, relative=True)
             .horizontal(pad_len + end_gap, relative=True)
         )
-        inner = (
+        al_inner_poly = (
             gdstk.FlexPath((0, 0), line_width, **ld_inner)
             .horizontal(trans_len, width=pad_width, relative=True)
             .horizontal(pad_len, relative=True)
         )
-        outer = gdstk.boolean(outer, inner, "not", **ld_outer)
-        self.cell.add(*outer, inner)
+        al_gap_poly = gdstk.boolean(al_gap_poly, al_inner_poly, "not", **ld_gap)
+        self.cell.add(*al_gap_poly, al_inner_poly)
         self.create_port("line", 0j, np.pi)
 
     @property

@@ -31,16 +31,18 @@ class FloatingQubit(elements.Element):
         pad_height = args.pad_height
         fillet_radius = args.fillet_radius
         ld_inner = self.config.LD_AL_INNER
-        ld_outer = self.config.LD_AL_OUTER
-        outer = gdstk.rectangle(
-            (-gap, -gap), (pad_width + gap, (pad_height + gap) * 2), **ld_outer
+        ld_gap = self.config.LD_AL_GAP
+        al_gap_poly = gdstk.rectangle(
+            (-gap, -gap), (pad_width + gap, (pad_height + gap) * 2), **ld_gap
         )
-        outer.fillet(fillet_radius, tolerance=self.config.tolerance)
-        inner = gdstk.rectangle((0, 0), (pad_width, pad_height), **ld_inner)
-        inner.fillet(fillet_radius, tolerance=self.config.tolerance)
-        inner2 = inner.copy().translate(0, pad_height + gap)
-        outer = gdstk.boolean(outer, [inner, inner2], "not", **ld_outer)
-        self.cell.add(*outer, inner, inner2)
+        al_gap_poly.fillet(fillet_radius, tolerance=self.config.tolerance)
+        al_inner_poly = gdstk.rectangle((0, 0), (pad_width, pad_height), **ld_inner)
+        al_inner_poly.fillet(fillet_radius, tolerance=self.config.tolerance)
+        al_inner_poly2 = al_inner_poly.copy().translate(0, pad_height + gap)
+        al_gap_poly = gdstk.boolean(
+            al_gap_poly, [al_inner_poly, al_inner_poly2], "not", **ld_gap
+        )
+        self.cell.add(*al_gap_poly, al_inner_poly, al_inner_poly2)
         self.create_port("bottom", pad_width / 2 - 1j * gap, math.pi * 3 / 2)
         self.create_port(
             "top", pad_width / 2 + 1j * (pad_height + gap) * 2, math.pi / 2
@@ -72,6 +74,7 @@ class FloatingXmonArgs:
     outer_arm_width: float = 180
     outer_square_width: float = 400
     fillet_radius: float = 10
+    with_gap: bool = True
 
 
 class FloatingXmon(elements.Element):
@@ -87,36 +90,46 @@ class FloatingXmon(elements.Element):
     def _init_cell(self):
         c = self.config
         args = self.args
-        inner = gdstk.cross(
+        al_inner_poly = gdstk.cross(
             0j, args.inner_cross_size, args.inner_arm_width, **c.LD_AL_INNER
         )
         v_sq = args.inner_square_width * (1 + 1j)
         sq = gdstk.rectangle(-v_sq / 2, v_sq / 2).rotate(math.pi / 4)
-        v_cut = args.inner_square_width + args.inner_gap * 1j
+        # ensure cut region is larger than square
+        v_cut = args.inner_square_width + 1 + args.inner_gap * 1j
         cut = gdstk.rectangle(-v_cut / 2, v_cut / 2).rotate(math.pi / 4)
-        inner = gdstk.boolean(inner, sq, "or", **c.LD_AL_INNER)
-        inner = gdstk.boolean(inner, cut, "not", **c.LD_AL_INNER)
-        for p in inner:
+        al_inner_poly = gdstk.boolean(al_inner_poly, sq, "or", **c.LD_AL_INNER)
+        al_inner_poly = gdstk.boolean(al_inner_poly, cut, "not", **c.LD_AL_INNER)
+        for p in al_inner_poly:
             p.fillet(args.fillet_radius, tolerance=self.config.tolerance)
-        outer = gdstk.cross(
-            0j, args.outer_cross_size, args.outer_arm_width, **c.LD_AL_OUTER
-        )
-        v_sq = args.outer_square_width * (1 + 1j)
-        sq = gdstk.rectangle(-v_sq / 2, v_sq / 2).rotate(math.pi / 4)
-        outer = gdstk.boolean(outer, sq, "or", **c.LD_AL_OUTER)
-        for p in outer:
-            p.fillet(args.fillet_radius, tolerance=self.config.tolerance)
-        outer = gdstk.boolean(outer, inner, "not", **c.LD_AL_OUTER)
-        self.cell.add(*inner, *outer)
+        self.cell.add(*al_inner_poly)
+
+        if args.with_gap:
+            al_gap_poly = gdstk.cross(
+                0j, args.outer_cross_size, args.outer_arm_width, **c.LD_AL_GAP
+            )
+            v_sq = args.outer_square_width * (1 + 1j)
+            sq = gdstk.rectangle(-v_sq / 2, v_sq / 2).rotate(math.pi / 4)
+            al_gap_poly = gdstk.boolean(al_gap_poly, sq, "or", **c.LD_AL_GAP)
+            for p in al_gap_poly:
+                p.fillet(args.fillet_radius, tolerance=self.config.tolerance)
+            al_gap_poly = gdstk.boolean(
+                al_gap_poly, al_inner_poly, "not", **c.LD_AL_GAP
+            )
+            self.cell.add(*al_gap_poly)
 
         self.create_port("squid", 0j, math.pi * 0.5)
         self.create_port(
             "rport", cmath.rect(args.inner_square_width / 2, -math.pi / 4), -math.pi / 4
         )
-        self.create_port("s", -0.5j * args.outer_cross_size, math.pi * 1.5)
-        self.create_port("n", 0.5j * args.outer_cross_size, math.pi * 0.5)
-        self.create_port("w", -0.5 * args.outer_cross_size + 0j, math.pi)
-        self.create_port("e", 0.5 * args.outer_cross_size + 0j, 0)
+
+        port_cross_size = (
+            args.outer_cross_size if args.with_gap else args.inner_cross_size
+        )
+        self.create_port("s", -0.5j * port_cross_size, math.pi * 1.5)
+        self.create_port("n", 0.5j * port_cross_size, math.pi * 0.5)
+        self.create_port("w", -0.5 * port_cross_size + 0j, math.pi)
+        self.create_port("e", 0.5 * port_cross_size + 0j, 0)
 
     @property
     def port_squid(self):
@@ -144,7 +157,7 @@ class FloatingXmon(elements.Element):
 
 
 @dataclass
-class HcouplerArgs:
+class HCouplerArgs:
     inner_width: float = 100
     inner_length: float = 858
     outer_width: float = 180
@@ -155,14 +168,20 @@ class HcouplerArgs:
 
     fillet_radius: float = 10
 
+    with_gap: bool = True
+    with_async_pad: bool = False
+    async_pad_length: float = 600
+    async_pad_width: float = 60
+    async_pad_gap: float = 70
+
 
 class HCoupler(elements.Element):
     def __init__(
-        self, args: HcouplerArgs | None = None, config: config.Config | None = None
+        self, args: HCouplerArgs | None = None, config: config.Config | None = None
     ):
         super().__init__(config=config)
         if args is None:
-            args = HcouplerArgs()
+            args = HCouplerArgs()
         self.args = args
         self._init_cell()
 
@@ -170,7 +189,7 @@ class HCoupler(elements.Element):
         c = self.config
         args = self.args
         v_inner = args.inner_length + 1j * args.inner_width
-        inner = gdstk.rectangle(-v_inner / 2, v_inner / 2)
+        al_inner_poly = gdstk.rectangle(-v_inner / 2, v_inner / 2)
 
         cut_top = gdstk.rectangle(
             -args.bottleneck_length / 2 + 1j * args.bottleneck_width / 2,
@@ -180,21 +199,38 @@ class HCoupler(elements.Element):
             -args.bottleneck_length / 2 - 1j * args.inner_width / 2,
             args.bottleneck_length / 2 - 1j * args.bottleneck_width / 2,
         )
-        inner = gdstk.boolean(inner, [cut_top, cut_bot], "not", **c.LD_AL_INNER)
-        for p in inner:
-            p.fillet(args.fillet_radius, tolerance=self.config.tolerance)
+        al_inner_poly = gdstk.boolean(
+            al_inner_poly, [cut_top, cut_bot], "not", **c.LD_AL_INNER
+        )
+        for p in al_inner_poly:
+            p.fillet(args.fillet_radius, tolerance=c.tolerance)
+        self.cell.add(*al_inner_poly)
 
-        v_outer = args.outer_length + 1j * args.outer_width
-        outer = gdstk.rectangle(-v_outer / 2, v_outer / 2, **c.LD_AL_OUTER)
-        outer.fillet(args.fillet_radius, tolerance=self.config.tolerance)
-        outer = gdstk.boolean(outer, inner, "not", **c.LD_AL_OUTER)
-        self.cell.add(*inner, *outer)
+        if args.with_gap:
+            v_gap = args.outer_length + 1j * args.outer_width
+            al_gap_poly = gdstk.rectangle(-v_gap / 2, v_gap / 2, **c.LD_AL_GAP)
+            al_gap_poly.fillet(args.fillet_radius, tolerance=c.tolerance)
+            al_gap_poly = gdstk.boolean(
+                al_gap_poly, al_inner_poly, "not", **c.LD_AL_GAP
+            )
+            self.cell.add(*al_gap_poly)
+
+        if args.with_async_pad:
+            pad = gdstk.rectangle(
+                0j, args.async_pad_length + args.async_pad_width * 1j, **c.LD_AL_INNER
+            ).translate(
+                -args.async_pad_length / 2,
+                args.async_pad_gap + args.bottleneck_width / 2,
+            )
+            pad.fillet(args.fillet_radius, tolerance=c.tolerance)
+            self.cell.add(pad)
 
         self.create_port(
             "squid", (args.outer_width + args.bottleneck_width) * 0.25j, math.pi / 2
         )
-        self.create_port("w", -0.5 * args.outer_length + 0j, math.pi)
-        self.create_port("e", 0.5 * args.outer_length + 0j, 0)
+        port_length = args.outer_length if args.with_gap else args.inner_length
+        self.create_port("w", -0.5 * port_length + 0j, math.pi)
+        self.create_port("e", 0.5 * port_length + 0j, 0)
 
     @property
     def port_squid(self):
@@ -216,6 +252,7 @@ if __name__ == "__main__":
     # chip.add_element(elem, elements.DockingPort(5000+5000j), transformation=elements.Transformation(rotation=math.pi/4))
     # chip.view()
 
-    elem = FloatingXmon()
+    # elem = FloatingXmon(FloatingXmonArgs(inner_square_width=400, with_gap=False))
+    elem = HCoupler(HCouplerArgs(with_gap=False, with_async_pad=True))
     # elem.write_gds("demo.gds", test_region=(-1000-1000j, 1000+1000j))
     elem.view()

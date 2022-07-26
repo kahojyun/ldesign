@@ -30,7 +30,7 @@ class Boundary(elements.Element):
         self._init_cell()
 
     def _init_cell(self):
-        ld_outer = self.config.LD_AL_OUTER
+        ld_gap = self.config.LD_AL_GAP
         args = self.args
         height = args.height
         width = args.width
@@ -38,7 +38,7 @@ class Boundary(elements.Element):
 
         def get_mask(size):
             mask = gdstk.rectangle(
-                (-size / 2, -size / 2), (size / 2, size / 2), **ld_outer
+                (-size / 2, -size / 2), (size / 2, size / 2), **ld_gap
             )
             return mask
 
@@ -48,7 +48,7 @@ class Boundary(elements.Element):
             [(0, 0), (width, 0), (width, height), (0, height), (0, 0)],
             edge_width,
             ends="extended",
-            **ld_outer
+            **ld_gap
         )
 
         # corner marker
@@ -57,7 +57,7 @@ class Boundary(elements.Element):
         )
         mask.repetition = gdstk.Repetition(2, 2, (width, height))
         masks = [mask, *mask.apply_repetition()]
-        boundary = gdstk.boolean(boundary, masks, "not", **ld_outer)
+        boundary = gdstk.boolean(boundary, masks, "not", **ld_gap)
         corner_marker = Marker(args.corner_marker, self.config)
         for x, y in product((0, width), (0, height)):
             self.add_element(corner_marker, elements.DockingPort(x + 1j * y))
@@ -81,7 +81,7 @@ class Boundary(elements.Element):
                 masks.append(mask.copy().translate(width + y * 1j))
                 self.add_element(side_marker, elements.DockingPort(y * 1j))
                 self.add_element(side_marker, elements.DockingPort(width + y * 1j))
-            boundary = gdstk.boolean(boundary, masks, "not", **ld_outer)
+            boundary = gdstk.boolean(boundary, masks, "not", **ld_gap)
 
         self.cell.add(*boundary)
         self.create_port("center", width / 2 + height / 2 * 1j, 0)

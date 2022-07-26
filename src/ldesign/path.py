@@ -170,13 +170,13 @@ def _create_gdstk_path(pos: complex, cfg: config.Config, cpw: CpwArgs):
         ],
         layer=[
             cfg.LD_AL_INNER["layer"],
-            cfg.LD_AL_OUTER["layer"],
-            cfg.LD_AL_OUTER["layer"],
+            cfg.LD_AL_GAP["layer"],
+            cfg.LD_AL_GAP["layer"],
         ],
         datatype=[
             cfg.LD_AL_INNER["datatype"],
-            cfg.LD_AL_OUTER["datatype"],
-            cfg.LD_AL_OUTER["datatype"],
+            cfg.LD_AL_GAP["datatype"],
+            cfg.LD_AL_GAP["datatype"],
         ],
         tolerance=cfg.tolerance,
     )

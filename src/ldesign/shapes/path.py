@@ -34,9 +34,7 @@ class OpenEnd(elements.Element):
     def _init_cell(self):
         width = 2 * self.args.gap + self.args.width
         height = self.args.gap
-        self.cell.add(
-            gdstk.rectangle(0j, width + height * 1j, **self.config.LD_AL_OUTER)
-        )
+        self.cell.add(gdstk.rectangle(0j, width + height * 1j, **self.config.LD_AL_GAP))
         self.create_port("line", width / 2 + 0j, np.pi * 3 / 2)
         self.create_port("end", width / 2 + 1j * height, np.pi / 2)
 
@@ -57,11 +55,11 @@ class FluxEnd(elements.Element):
 
     def _init_cell(self):
         ld_inner = self.config.LD_AL_INNER
-        ld_outer = self.config.LD_AL_OUTER
+        ld_gap = self.config.LD_AL_GAP
         line_width = self.args.cpw.width
         gap = self.args.cpw.gap
         l_length = min(self.args.left_gap_len, self.args.right_gap_len)
-        inner = [
+        al_inner_poly = [
             gdstk.rectangle(
                 line_width / 2 - 1j * (gap + line_width), -line_width / 2 + 0j
             ),
@@ -70,8 +68,8 @@ class FluxEnd(elements.Element):
                 -line_width / 2 - gap - l_length - 1j * gap,
             ),
         ]
-        inner = gdstk.boolean(inner, [], "or", **ld_inner)
-        outer = [
+        al_inner_poly = gdstk.boolean(al_inner_poly, [], "or", **ld_inner)
+        al_gap_poly = [
             gdstk.rectangle(
                 0j, -line_width / 2 - gap - self.args.right_gap_len - 1j * gap
             ),
@@ -89,8 +87,8 @@ class FluxEnd(elements.Element):
                 line_width / 2 + 0j, line_width / 2 + gap - 1j * (2 * gap + line_width)
             ),
         ]
-        outer = gdstk.boolean(outer, inner, "not", **ld_outer)
-        self.cell.add(*inner, *outer)
+        al_gap_poly = gdstk.boolean(al_gap_poly, al_inner_poly, "not", **ld_gap)
+        self.cell.add(*al_inner_poly, *al_gap_poly)
         self.create_port("line", 0j, np.pi / 2)
         self.create_port("flux", -1j * (2 * gap + line_width), np.pi * 3 / 2)
 
@@ -154,7 +152,7 @@ class FluxEnd3D(elements.Element):
             cut = gdstk.rectangle(
                 (ew - self.config.tolerance) * (-1 + 1j),
                 (w + ew - self.config.tolerance) * (1 - 1j),
-                **self.config.LD_AL_OUTER
+                **self.config.LD_AL_GAP
             )
             cut = cut.fillet(r + ew, tolerance=self.config.tolerance)
             self.cell.add(cut)
@@ -199,7 +197,7 @@ class FluxEndTriangle(elements.Element):
             -args.cpw.gap - args.cpw.width - (args.line_width + args.gap_down) * 1j,
             args.cpw.gap + args.tri_width - (args.line_width + args.gap_down) * 1j,
         ]
-        inner = [
+        al_inner_poly = [
             gdstk.rectangle(
                 args.cpw.gap + args.tri_width + 0j,
                 -args.cpw.gap - args.cpw.width - args.line_width * 1j,
@@ -211,14 +209,18 @@ class FluxEndTriangle(elements.Element):
                 **self.config.LD_AL_INNER
             ),
         ]
-        inner = gdstk.boolean(inner, [], "or", **self.config.LD_AL_INNER)
-        outer = gdstk.Polygon(outer_points, **self.config.LD_AL_OUTER)
-        outer = gdstk.boolean(outer, inner, "not", **self.config.LD_AL_OUTER)
+        al_inner_poly = gdstk.boolean(
+            al_inner_poly, [], "or", **self.config.LD_AL_INNER
+        )
+        al_gap_poly = gdstk.Polygon(outer_points, **self.config.LD_AL_GAP)
+        al_gap_poly = gdstk.boolean(
+            al_gap_poly, al_inner_poly, "not", **self.config.LD_AL_GAP
+        )
         # self.cell.add(gdstk.Polygon(outer_points, **self.config.LD_AL_OUTER))
         # self.cell.add(gdstk.rectangle(-args.cpw.width+0j, -args.cpw.gap-args.cpw.width+(args.gap_up+args.tri_width)*1j, **self.config.LD_AL_OUTER))
         # self.cell.add(gdstk.rectangle(args.cpw.gap + args.tri_width - args.line_width*1j, -args.cpw.gap-args.cpw.width-(args.line_width+args.gap_down)*1j, **self.config.LD_AL_OUTER))
-        self.cell.add(*inner)
-        self.cell.add(*outer)
+        self.cell.add(*al_inner_poly)
+        self.cell.add(*al_gap_poly)
 
         self.create_port(
             "line",
@@ -263,12 +265,16 @@ class StraightCpw(elements.CpwWaveguide):
         self._init_cell(length)
 
     def _init_cell(self, length: float):
-        inner = gdstk.FlexPath(
+        al_inner_poly = gdstk.FlexPath(
             [0j, length + 0j], self.args.width, **self.config.LD_AL_INNER
         )
-        outer = gdstk.FlexPath([0j, length + 0j], self.args.width + 2 * self.args.gap)
-        outer = gdstk.boolean(outer, inner, "not", **self.config.LD_AL_OUTER)
-        self.cell.add(*outer, inner)
+        al_gap_poly = gdstk.FlexPath(
+            [0j, length + 0j], self.args.width + 2 * self.args.gap
+        )
+        al_gap_poly = gdstk.boolean(
+            al_gap_poly, al_inner_poly, "not", **self.config.LD_AL_GAP
+        )
+        self.cell.add(*al_gap_poly, al_inner_poly)
         self.create_port("start", 0j, math.pi)
         self.create_port("end", length + 0j, 0)
 

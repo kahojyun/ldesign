@@ -36,8 +36,8 @@ class Xmon(elements.Element):
         r_port,
     ):
         ld_inner = self.config.LD_AL_INNER
-        ld_outer = self.config.LD_AL_OUTER
-        inner = gdstk.cross(
+        ld_gap = self.config.LD_AL_GAP
+        al_inner_poly = gdstk.cross(
             1j * (arm_len + arm_width / 2),
             2 * arm_len + arm_width,
             arm_width,
@@ -51,12 +51,12 @@ class Xmon(elements.Element):
         left_y = arm_len - gap
         right_x = -left_x
         right_y = arm_len + arm_width + gap
-        outer = [
+        al_gap_poly = [
             gdstk.rectangle(bottom_x + 1j * bottom_y, top_x + 1j * top_y),
             gdstk.rectangle(left_x + 1j * left_y, right_x + 1j * right_y),
         ]
-        outer = gdstk.boolean(outer, inner, "not", **ld_outer)
-        self.cell.add(*outer, inner)
+        al_gap_poly = gdstk.boolean(al_gap_poly, al_inner_poly, "not", **ld_gap)
+        self.cell.add(*al_gap_poly, al_inner_poly)
         point_map = {
             "n": 1j * top_y,
             "e": right_x + 1j * (arm_len + arm_width / 2),

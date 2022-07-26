@@ -2546,10 +2546,10 @@ class Polygon:
         """
     def transform(
         self,
-        magnification=...,
-        x_reflection=...,
-        rotation=...,
-        translation=...,
+        magnification: float = 1,
+        x_reflection: bool = False,
+        rotation: float = 0,
+        translation: Point | None = None,
         matrix=...,
     ) -> Self:
         """

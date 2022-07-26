@@ -29,8 +29,8 @@ class UPad(elements.Element):
         self, u_width, u_height, inner_gap, outer_gap, side_width, bottom_width
     ):
         ld_inner = self.config.LD_AL_INNER
-        ld_outer = self.config.LD_AL_OUTER
-        inner = gdstk.rectangle(
+        ld_gap = self.config.LD_AL_GAP
+        al_inner_poly = gdstk.rectangle(
             -side_width - u_width / 2 + 0j,
             side_width + u_width / 2 + 1j * (u_height + bottom_width),
         )
@@ -38,20 +38,22 @@ class UPad(elements.Element):
             -u_width / 2 + 1j * bottom_width,
             u_width / 2 + 1j * (bottom_width + u_height),
         )
-        inner = gdstk.boolean(inner, inner_cut, "not", **ld_inner)
-        outer = gdstk.rectangle(
+        al_inner_poly = gdstk.boolean(al_inner_poly, inner_cut, "not", **ld_inner)
+        al_gap_poly = gdstk.rectangle(
             -side_width - u_width / 2 - outer_gap - 1j * outer_gap,
             side_width
             + u_width / 2
             + outer_gap
             + 1j * (u_height + bottom_width + outer_gap),
         )
-        outer_cut = gdstk.rectangle(
+        gap_cut = gdstk.rectangle(
             -u_width / 2 + inner_gap + 1j * (bottom_width + inner_gap),
             u_width / 2 - inner_gap + 1j * (u_height + bottom_width + outer_gap),
         )
-        outer = gdstk.boolean(outer, [outer_cut] + inner, "not", **ld_outer)
-        self.cell.add(*inner, *outer)
+        al_gap_poly = gdstk.boolean(
+            al_gap_poly, [gap_cut] + al_inner_poly, "not", **ld_gap
+        )
+        self.cell.add(*al_inner_poly, *al_gap_poly)
         self.create_port("line", 0j, np.pi * 3 / 2)
         self.create_port("u", 1j * (bottom_width + inner_gap), np.pi / 2)
 

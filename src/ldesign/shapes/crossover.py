@@ -62,7 +62,7 @@ class Crossover(elements.Element):
             elements.Transformation(rotation=math.pi),
         )
 
-        cpw_outer = [
+        cpw_gap = [
             gdstk.FlexPath(
                 [0j, args.length_in + cpw_over.gap + 0j],
                 cpw_over.width + 2 * cpw_over.gap,
@@ -82,10 +82,8 @@ class Crossover(elements.Element):
                 **self.config.LD_AL_INNER
             ),
         ]
-        cpw_outer = gdstk.boolean(
-            cpw_outer, cpw_inner, "not", **self.config.LD_AL_OUTER
-        )
-        self.cell.add(*cpw_inner, *cpw_outer)
+        cpw_gap = gdstk.boolean(cpw_gap, cpw_inner, "not", **self.config.LD_AL_GAP)
+        self.cell.add(*cpw_inner, *cpw_gap)
 
     @property
     def port_start(self):

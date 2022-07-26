@@ -33,7 +33,7 @@ class TPad(elements.Element):
         line_width = cpw.width
         fillet_radius = args.fillet_radius
         ld_inner = self.config.LD_AL_INNER
-        ld_outer = self.config.LD_AL_OUTER
+        ld_gap = self.config.LD_AL_GAP
         region = gdstk.rectangle(
             (-pad_width / 2 - line_gap, -line_gap),
             (pad_width / 2 + line_gap, pad_height + line_gap + fillet_radius),
@@ -64,11 +64,11 @@ class TPad(elements.Element):
                 (-pad_width / 2 - line_gap, pad_height + line_gap),
                 (-pad_width / 2 - line_gap, -line_gap),
             ],
-            **ld_outer
+            **ld_gap
         )
         pad_outer.fillet(fillet_radius)
-        pad_outer = gdstk.boolean(region, pad_outer, "and", **ld_outer)
-        pad_outer = gdstk.boolean(pad_outer, pad_inner, "not", **ld_outer)
+        pad_outer = gdstk.boolean(region, pad_outer, "and", **ld_gap)
+        pad_outer = gdstk.boolean(pad_outer, pad_inner, "not", **ld_gap)
         self.cell.add(*pad_inner)
         self.cell.add(*pad_outer)
         self.create_port("line", pad_height * 1j, np.pi / 2)

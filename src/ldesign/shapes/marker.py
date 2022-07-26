@@ -38,7 +38,7 @@ class Marker(elements.Element):
 
         def get_mask(size: float):
             return gdstk.rectangle(
-                -size * (1 + 1j) / 2, size * (1 + 1j) / 2, **c.LD_AL_OUTER
+                -size * (1 + 1j) / 2, size * (1 + 1j) / 2, **c.LD_AL_GAP
             )
 
         cross = [
@@ -46,7 +46,7 @@ class Marker(elements.Element):
                 (0, 0),
                 args.outer_marker_size,
                 args.outer_marker_arm_width,
-                **c.LD_AL_OUTER
+                **c.LD_AL_GAP
             )
         ]
 
@@ -55,7 +55,7 @@ class Marker(elements.Element):
                 (0, 0),
                 args.outer_marker_size,
                 args.outer_marker_arm_width,
-                **c.LD_AL_OUTER
+                **c.LD_AL_GAP
             )
             star_cut_size = args.star_cut_size
             if star_cut_size is None:
@@ -63,19 +63,19 @@ class Marker(elements.Element):
             star_cut = get_mask(star_cut_size)
             star_cross.rotate(math.pi / 4, 0j)
             star_cut.rotate(math.pi / 4, 0j)
-            star_cross = gdstk.boolean(star_cross, star_cut, "not", **c.LD_AL_OUTER)
-            cross = gdstk.boolean(cross, star_cross, "or", **c.LD_AL_OUTER)
+            star_cross = gdstk.boolean(star_cross, star_cut, "not", **c.LD_AL_GAP)
+            cross = gdstk.boolean(cross, star_cross, "or", **c.LD_AL_GAP)
         # make room for inner marker
         mask = get_mask(args.inner_marker_size + 2 * args.inner_marker_gap)
-        cross = gdstk.boolean(cross, mask, "not", **c.LD_AL_OUTER)
+        cross = gdstk.boolean(cross, mask, "not", **c.LD_AL_GAP)
         # inner marker
         cross = gdstk.boolean(
-            cross, get_mask(args.inner_marker_size), "or", **c.LD_AL_OUTER
+            cross, get_mask(args.inner_marker_size), "or", **c.LD_AL_GAP
         )
         inner_cross = gdstk.cross(
-            (0, 0), args.inner_marker_size, args.inner_marker_arm_width, **c.LD_AL_OUTER
+            (0, 0), args.inner_marker_size, args.inner_marker_arm_width, **c.LD_AL_GAP
         )
-        cross = gdstk.boolean(cross, inner_cross, "not", **c.LD_AL_OUTER)
+        cross = gdstk.boolean(cross, inner_cross, "not", **c.LD_AL_GAP)
         self.cell.add(*cross)
 
 
@@ -91,6 +91,8 @@ class FlipChipMarkerArgs:
     cross_width: float = 60
     cross_arm: float = 4
     cross_pos: float = 40
+    with_metal: bool = True
+    metal_width: float = 350
 
 
 class FlipChipMarker(elements.Element):
@@ -115,10 +117,10 @@ class FlipChipMarker(elements.Element):
         c = self.config
         c2 = self.config2
         args = self.args
-        cross = gdstk.cross(0j, args.cross_width, args.cross_arm, **c2.LD_AL_OUTER)
+        cross = gdstk.cross(0j, args.cross_width, args.cross_arm, **c2.LD_AL_GAP)
         v = args.cross_width * (1 + 1j)
-        rect = gdstk.rectangle(-v / 2, v / 2, **c.LD_AL_OUTER)
-        rect = gdstk.boolean(rect, cross, "not", **c.LD_AL_OUTER)
+        rect = gdstk.rectangle(-v / 2, v / 2, **c.LD_AL_GAP)
+        rect = gdstk.boolean(rect, cross, "not", **c.LD_AL_GAP)
         v = (args.cross_width / 2 + args.cross_pos) * (1 - 1j)
         self.cell.add(cross.copy().translate(v))
         self.cell.add(cross.copy().translate(-v))
@@ -126,11 +128,11 @@ class FlipChipMarker(elements.Element):
             self.cell.add(p.copy().translate(v))
             self.cell.add(p.copy().translate(-v))
         v = args.major_tick_width + args.major_tick_length / 2 * 1j
-        major1 = gdstk.rectangle(0j, v, **c.LD_AL_OUTER)
-        major2 = gdstk.rectangle(0j, v.conjugate(), **c2.LD_AL_OUTER)
+        major1 = gdstk.rectangle(0j, v, **c.LD_AL_GAP)
+        major2 = gdstk.rectangle(0j, v.conjugate(), **c2.LD_AL_GAP)
         v = args.minor_tick_width + args.minor_tick_length / 2 * 1j
-        minor1 = gdstk.rectangle(0j, v, **c.LD_AL_OUTER)
-        minor2 = gdstk.rectangle(0j, v.conjugate(), **c2.LD_AL_OUTER)
+        minor1 = gdstk.rectangle(0j, v, **c.LD_AL_GAP)
+        minor2 = gdstk.rectangle(0j, v.conjugate(), **c2.LD_AL_GAP)
         for i, j in product(range(args.n_tick), range(4)):
             a = math.pi / 2 * j
             v = cmath.rect(args.first_tick + i * args.tick_spacing, a)
@@ -139,14 +141,21 @@ class FlipChipMarker(elements.Element):
             v = cmath.rect(args.first_tick + (i + 0.5) * args.tick_spacing, a)
             self.cell.add(minor1.copy().transform(translation=v, rotation=a))
             self.cell.add(minor2.copy().transform(translation=v, rotation=a))
+        if args.with_metal:
+            v = args.metal_width * (1 + 1j)
+            metal1 = gdstk.rectangle(-v / 2, v / 2, **c.LD_AL_OUTER)
+            metal2 = gdstk.rectangle(-v / 2, v / 2, **c2.LD_AL_OUTER)
+            self.cell.add(metal1, metal2)
+            self.flatten(chips=[c.LD_AL_OUTER["datatype"], c2.LD_AL_OUTER["datatype"]])
 
 
 if __name__ == "__main__":
     config.use_preset_design()
     base_config = copy.copy(config.global_config)
     fc_config = copy.copy(base_config)
-    fc_config.LD_AL_OUTER = {"layer": 1, "datatype": 1}
+    fc_config.LD_AL_GAP = {"layer": 1, "datatype": 1}
     fc_config.LD_AL_INNER = {"layer": 101, "datatype": 1}
+    fc_config.LD_AL_OUTER = {"layer": 102, "datatype": 1}
     fc_config.LD_BANDAGE = {"layer": 7, "datatype": 1}
     fc_config.LD_JJ_PAD = {"layer": 6, "datatype": 1}
     fc_config.LD_JJ = {"layer": 5, "datatype": 1}

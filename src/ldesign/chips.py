@@ -53,7 +53,7 @@ class Chip24Ports(elements.Element):
         self, text: str, size: float, position: complex, vertical: bool = False
     ) -> None:
         self.cell.add(
-            *gdstk.text(text, size, position, vertical, **self.config.LD_AL_OUTER)
+            *gdstk.text(text, size, position, vertical, **self.config.LD_AL_GAP)
         )
 
 
@@ -105,7 +105,7 @@ class Chip96Ports(elements.Element):
         self, text: str, size: float, position: complex, vertical: bool = False
     ) -> None:
         self.cell.add(
-            *gdstk.text(text, size, position, vertical, **self.config.LD_AL_OUTER)
+            *gdstk.text(text, size, position, vertical, **self.config.LD_AL_GAP)
         )
 
     def add_flip_chip(
@@ -146,8 +146,9 @@ class Chip96Ports(elements.Element):
 if __name__ == "__main__":
     config.use_preset_design()
     fc_config = config.Config()
-    fc_config.LD_AL_OUTER = {"layer": 1, "datatype": 1}
+    fc_config.LD_AL_GAP = {"layer": 1, "datatype": 1}
     fc_config.LD_AL_INNER = {"layer": 101, "datatype": 1}
+    fc_config.LD_AL_OUTER = {"layer": 102, "datatype": 1}
     fc_config.LD_BANDAGE = {"layer": 7, "datatype": 1}
     fc_config.LD_JJ_PAD = {"layer": 6, "datatype": 1}
     fc_config.LD_JJ = {"layer": 5, "datatype": 1}
