@@ -11,7 +11,7 @@ description = "Layout design tool for superconducting circuits based on gdstk."
 readme = "README.md"
 requires-python = ">=3.10"
 keywords = ["layout", "gdsii"]
-license = {file = "LICENSE"}
+license = {text = "MIT License"}
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
