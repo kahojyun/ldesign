@@ -90,6 +90,16 @@ class Transformation:
 
 @dataclass
 class DockingPort:
+    """2D point with direction.
+
+    Attributes:
+        point (complex)
+
+        angle (float)
+
+        element (Element): relative to this element
+    """
+
     point: complex = 0j
     angle: float = 0
     element: Optional[Element] = None
@@ -134,7 +144,18 @@ TE = TypeVar("TE", bound="Element")
 
 
 class Element:
-    # Transformation relative to parent
+    """Wrapper arround `gdstk.Cell`, representing a layout unit that can be reused.
+
+    Attributes:
+        transformation: Transformation relative to parent
+        cell: gdstk.Cell
+        children: elements added to this element
+        labeled_children: children with labels
+        parent: the element which this element is added to
+        config: configurations of layer, tolerence, etc.
+        ports: reference points and directions of this element
+    """
+
     transformation: Transformation
     cell: gdstk.Cell
     children: list[Element]
@@ -192,6 +213,13 @@ class Element:
         return new
 
     def create_port(self, name: str, point: complex, angle: float):
+        """Create a new port for element.
+
+        Arguments:
+            name (str): name of the port
+            point (complex): 2D coordinate
+            angle (float): direction
+        """
         self.ports[name] = DockingPort(point, angle, self)
         if self.config.label_ports:
             self.cell.add(gdstk.Label(name, point, **self.config.LD_LABEL))
@@ -211,6 +239,15 @@ class Element:
     def get_total_transformation(
         self, root_elem: Element | None = None
     ) -> Transformation:
+        """Calculate the cumulative transformation of the element relative to `root_elem`.
+
+        Arguments:
+            root_elem (Element, optional): If `root_elem` is None, assume `root_elem`
+                is the top level ancestor of this element.
+
+        Return:
+            Transformation
+        """
         # from bottom to top
         transformations = []
         p = self
@@ -231,6 +268,27 @@ class Element:
         match_angle: bool = True,
         copy: bool = True,
     ) -> TE:
+        """Add an child element.
+
+        The position and direction of the child element will be determined by `ref_port`,
+        `elem_port`, `transformation` and `match_angle` arguments.
+
+        Arguments:
+            element (Element): The child element
+            ref_port (DockingPort, optional): A port in the element to be added to.
+            elem_port (DockingPort, optional): A port in the child element.
+            transformation (Transformation, optional): Additional transformation after
+                matching `ref_port` and `elem_port`.
+            label (str, optional): Label of the child element. If not `None`, the
+                child element will be added to the `labeled_children` dictionary.
+            match_angle (bool, optional): Whether match the direction of the child element.
+                Default value is `True`.
+            copy (bool, optional): Whether create a copy of the child element before adding
+                to `children` or `labeled_children`. Default value is `True`.
+
+        Return:
+            (Element) the child element added to this element.
+        """
         if not copy and element.parent is not None:
             raise ValueError(
                 "Trying to add element without copying but element already has a parent."
@@ -292,6 +350,11 @@ class Element:
         return transformed_element
 
     def flatten(self, chips: list[int] | None = None):
+        """Flatten the dependency structure of the element and unite polygons.
+
+        Arguments:
+            chips (list[int], optional): List of chip id.
+        """
         cell = self.cell.flatten()
         ld_gap = self.config.LD_AL_GAP
         ld_inner = self.config.LD_AL_INNER
@@ -352,6 +415,15 @@ class Element:
         chips: list[int] | None = None,
         chip_grounds: list[bool] | None = None,
     ):
+        """Add the element to `gdstk.Library`.
+
+        Arguments:
+            lib (gdstk.Library): The library to be added to
+            flatten (bool): Whether flatten the element before adding to library.
+            test_region (tuple[complex, complex]): The clipping region for simulation.
+            chips (list[int]): List of chip id.
+            chip_grounds (list[bool]): Whether add grounds for simulation.
+        """
         if test_region is not None:
             self.flatten(chips)
             if chips is None:
@@ -431,6 +503,7 @@ class Element:
             lib.add(self.cell, *self.cell.dependencies(True))
 
     def view(self):
+        """Open a GUI to view the element."""
         filename = f"{uuid.uuid4()}.gds"
         self.write_gds(filename, flatten=False)
 
@@ -448,6 +521,18 @@ class Element:
         chips: list[int] | None = None,
         chip_grounds: list[bool] | None = None,
     ):
+        """Write the element to a GDSII file.
+
+        Arguments:
+            filename (str): Name or path of the file.
+            flatten (bool): Whether flatten the element before adding to library.
+            test_region (tuple[complex, complex]): The clipping region for simulation.
+            libname (str): Name of the GDSII library.
+            max_points (int): Maximum number of vertice in a polygon.  Modern GDSII
+                editor support up to 4000 points.
+            chips (list[int]): List of chip id.
+            chip_grounds (list[bool]): Whether add grounds for simulation.
+        """
         lib = gdstk.Library(libname)
         self.add_to_library(lib, flatten, test_region, chips, chip_grounds)
         lib.write_gds(filename, max_points=max_points)

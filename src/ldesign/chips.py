@@ -79,6 +79,7 @@ class Chip96Ports(elements.Element):
     def place_bondpads(
         self, pads: Sequence[bondpad.BondPad | None]
     ) -> list[bondpad.BondPad | None]:
+        """Place `BondPad`s to the chip."""
         if len(pads) != self._PORT_N:
             raise ValueError
         n_port_per_edge = self._PORT_N // 4
@@ -104,6 +105,7 @@ class Chip96Ports(elements.Element):
     def add_text(
         self, text: str, size: float, position: complex, vertical: bool = False
     ) -> None:
+        """Add text polygon to the cell."""
         self.cell.add(
             *gdstk.text(text, size, position, vertical, **self.config.LD_AL_GAP)
         )
@@ -116,6 +118,15 @@ class Chip96Ports(elements.Element):
         marker_offset: complex,
         fc_config: config.Config,
     ):
+        """Add flip chip related elements to the chip.
+
+        Arguments:
+            fc_width (float): Width of the flip chip.
+            support_width (float): Width of the support region.
+            support_gap (float): Gap of the support region to the edge of the flip chip.
+            marker_offset (complex): Position offset of the flip chip marker.
+            fc_config (config.Config): Configurations for the flip chip.
+        """
         fc_boundary = boundary.Boundary(
             boundary.BoundaryArgs(width=fc_width), config=fc_config
         )

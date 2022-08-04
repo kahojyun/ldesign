@@ -25,6 +25,17 @@ ANGLE_ERR = 1e-7
 
 @dataclass
 class PathOptions:
+    """Options for path.
+
+    Arguments:
+        radius (float): Default turn radius.
+        cpw (CpwArgs): Parameters of the coplanar waveguide.
+        parent_element (Element): Parent element of the path.
+        first_bridge (float, optional): Position of the first bridge.
+        bridge_spacing (float, optional): Spacing of bridges. If `None`, no bridge
+            will be added.
+    """
+
     radius: float = 30
     cpw: CpwArgs = field(default_factory=CpwArgs)
     parent_element: elements.Element | None = None
@@ -935,6 +946,18 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
 # TODO support length mark in the middle of the path
 # lines go into ports except the start port
 class PathOpGenerator:
+    """A helper class for generating `PathOp`.
+
+    Attributes:
+        options (PathOptions)
+
+    Arguments:
+        start (complex or elements.DockingPort): The start point or port of the path.
+        start_radius (float): Turn radius of the first turn at `start`.
+        options (PathOptions): Options that specify the default parameters of
+            the path, such as turn radius and bridge spacing.
+    """
+
     _ops: list[PathOp]
     options: PathOptions
 
@@ -959,6 +982,17 @@ class PathOpGenerator:
         radius: float | None = None,
         angle: float | None = None,
     ) -> None:
+        """Add a new segment to the path.
+
+        Arguments:
+            point (complex or DockingPort): Target point/port.  If `point` is an
+                instance of `DockingPort`, the path will match its direction to the
+                opposite of the port.
+            radius (float, optional): Turn radius at `point`. If `None`, use the
+                value specified in `options`.
+            angle (float, optional): If not `None`, specify the direction of the
+                path at `point`.  Ignored if `point` is an instance of `DockingPort`.
+        """
         if radius is None:
             radius = self.options.radius
         match point, angle:
@@ -972,9 +1006,11 @@ class PathOpGenerator:
                 raise TypeError(point)
 
     def extend(self, length: float) -> None:
+        """Extend the path in the current direction."""
         self._ops.append(ExtendOp(length))
 
     def turn(self, angle: float, radius: float | None = None) -> None:
+        """Add a new turn to the path."""
         if radius is None:
             radius = self.options.radius
         self._ops.append(TurnOp(radius, angle))
@@ -988,6 +1024,7 @@ class PathOpGenerator:
         length_in: float,
         port: elements.DockingPort | None = None,
     ) -> None:
+        """Add a crossover to the path."""
         cpw_over = self.options.cpw
         crossover_args = CrossoverArgs(
             cpw_under, cpw_over, gap, length_in, length_pad, length_trans
@@ -1010,6 +1047,17 @@ class PathOpGenerator:
         label: str | None = None,
         length: float | None = None,
     ):
+        """Add an element to the path.
+
+        Arguments:
+            element (Element): The element.
+            port_in (DockingPort): The port this path will go into.
+            port_out (DockingPort): The port this path will go out of.
+            copy (bool): Whether create a copy of the element.  Refer to `Element.add_element`.
+            label (str, optional): Label of the element.  Refer to `Element.add_element`.
+            length (float, optional): Effective length of the path passing through
+                the element.
+        """
         self._ops.append(ElementOp(element, port_in, port_out, copy, label, length))
 
     def jump(
@@ -1017,6 +1065,12 @@ class PathOpGenerator:
         port: elements.DockingPort,
         length: float | None = None,
     ):
+        """Jump to a new position and start a new path.
+
+        Arguments:
+            port (DockingPort): The port where the new path starts.
+            length (float): Effective length of the path.
+        """
         self._ops.append(JumpOp(port, length))
 
     def set_state(
@@ -1024,6 +1078,13 @@ class PathOpGenerator:
         bridge_spacing: float | None = None,
         bridge_len_tracker: float | None = None,
     ):
+        """Set the state of the path.
+
+        Arguments:
+            bridge_spacing (float, optional): New bridge spacing.
+            bridge_len_tracker (float, optional): Change the length counter used
+                for bridge placement.
+        """
         self._ops.append(SetStateOp(bridge_spacing, bridge_len_tracker))
 
     def auto_meander(
@@ -1036,6 +1097,25 @@ class PathOpGenerator:
         radius: float | None = None,
         length: float | None = None,
     ) -> None:
+        """Add a meander path.
+
+        `auto_meander` will add new turns to the path when required length increased.
+        If you want a consistent number of turns, use `balanced_meander` instead.
+
+        Arguments:
+            width (float): Width of the meander region.
+            depth (float): Depth of the meander region.
+            direction (one of "left", "right", "auto"): First turn direction.
+                If `auto`, the direction is determined automatically for maximum length.
+            in_pos (float): The position where the path goes into the meander region,
+                relative to the left side.
+            out_pos (float): The position where the path goes out of the meander region,
+                relative to the left side.
+            radius (float, optional): Turn radius.  If `None`, use the value specified in
+                `options`.
+            length (float, optional): Total length of the meander path.  If `None`, the
+                length could be determined later by method such as `create_path_from_ops`.
+        """
         if radius is None:
             radius = self.options.radius
         self._ops.append(
@@ -1052,6 +1132,23 @@ class PathOpGenerator:
         radius: float | None = None,
         length: float | None = None,
     ) -> None:
+        """Add a meander path.
+
+        `balanced_meander` adjust the length of all legs while keeping the number
+        of turns unchanged.
+
+        Arguments:
+            n_turn (int): Number of turns.
+            alignment (one of "left", "right", "center"): Alignment of the legs.
+            width (float, optional): Width of the meander region.
+            depth (float, optional): Depth of the meander region.
+            first_turn (one of "left", "right", optional): First turn direction.
+                Default value is "right".
+            radius (float, optional): Turn radius.  If `None`, use the value specified in
+                `options`.
+            length (float, optional): Total length of the meander path.  If `None`, the
+                length could be determined later by method such as `create_path_from_ops`.
+        """
         if radius is None:
             radius = self.options.radius
         self._ops.append(
@@ -1066,6 +1163,17 @@ class PathOpGenerator:
         radius: float | None = None,
         check_direction=False,
     ):
+        """Add a series of segment using intersections of lines.
+
+        Arguments:
+            ports (sequence of DockingPort): Sequence of ports.  Each port coresponds
+                to a 2D line.
+            radius (float, optional): Turn radius.  If `None`, use the value specified in
+                `options`.
+            check_direction (bool, optional): Whether check the direction of ports and
+                ensure the intersection is on the direction of both ports.  Default
+                value is `False`.
+        """
         for p1, p2 in pairwise(ports):
             tp1 = p1.get_transformed_port(self.options.parent_element)
             tp2 = p2.get_transformed_port(self.options.parent_element)
@@ -1073,6 +1181,7 @@ class PathOpGenerator:
             self.segment(point, radius)
 
     def build(self) -> list[PathOp]:
+        """Get a list of `PathOp`."""
         return list(self._ops)
 
 
@@ -1115,6 +1224,20 @@ def create_cpw_from_ops(
     options: PathOptions | None = None,
     cfg: config.Config | None = None,
 ) -> elements.CpwWaveguide:
+    """Create a `CpwWaveguide` element from `PathOp`s.
+
+    Argument:
+        ops (Sequence[PathOp]): Sequence of `PathOp`.
+        total_length (float, optional): If not `None`, set the total length of the
+            path.
+        options (PathOptions, optional): `PathOptions` specifying coplanar waveguide
+            properties.
+        cfg (config.Config, optional): Configurations controling the creation of
+            path element.
+
+    Return:
+        Newly created `CpwWaveguide` element.
+    """
     if options is None:
         options = PathOptions()
     if cfg is None:
