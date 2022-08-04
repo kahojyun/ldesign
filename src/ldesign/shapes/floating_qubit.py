@@ -11,7 +11,8 @@ class FloatingQubitArgs:
     gap: float = 30
     pad_width: float = 500
     pad_height: float = 120
-    fillet_radius: float = 20
+    fillet_radius: float = 10
+    with_gap: bool = True
 
 
 class FloatingQubit(elements.Element):
@@ -32,24 +33,42 @@ class FloatingQubit(elements.Element):
         fillet_radius = args.fillet_radius
         ld_inner = self.config.LD_AL_INNER
         ld_gap = self.config.LD_AL_GAP
-        al_gap_poly = gdstk.rectangle(
-            (-gap, -gap), (pad_width + gap, (pad_height + gap) * 2), **ld_gap
-        )
-        al_gap_poly.fillet(fillet_radius, tolerance=self.config.tolerance)
+
         al_inner_poly = gdstk.rectangle((0, 0), (pad_width, pad_height), **ld_inner)
         al_inner_poly.fillet(fillet_radius, tolerance=self.config.tolerance)
         al_inner_poly2 = al_inner_poly.copy().translate(0, pad_height + gap)
-        al_gap_poly = gdstk.boolean(
-            al_gap_poly, [al_inner_poly, al_inner_poly2], "not", **ld_gap
-        )
-        self.cell.add(*al_gap_poly, al_inner_poly, al_inner_poly2)
-        self.create_port("bottom", pad_width / 2 - 1j * gap, math.pi * 3 / 2)
+        if args.with_gap:
+            al_gap_poly = gdstk.rectangle(
+                (-gap, -gap), (pad_width + gap, (pad_height + gap) * 2), **ld_gap
+            )
+            al_gap_poly.fillet(fillet_radius, tolerance=self.config.tolerance)
+            al_gap_poly = gdstk.boolean(
+                al_gap_poly, [al_inner_poly, al_inner_poly2], "not", **ld_gap
+            )
+            self.cell.add(*al_gap_poly)
+            self.create_port("bottom", pad_width / 2 - 1j * gap, math.pi * 3 / 2)
+            self.create_port(
+                "top", pad_width / 2 + 1j * (pad_height + gap) * 2, math.pi / 2
+            )
+            self.create_port(
+                "top_right", pad_width + 1j * (pad_height + gap) * 2, math.pi / 2
+            )
+        else:
+            self.create_port("bottom", pad_width / 2 + 0j, math.pi * 3 / 2)
+            self.create_port(
+                "top", pad_width / 2 + 1j * (pad_height * 2 + gap), math.pi / 2
+            )
+            self.create_port(
+                "top_right", pad_width + 1j * (pad_height * 2 + gap), math.pi / 2
+            )
+        self.cell.add(al_inner_poly, al_inner_poly2)
         self.create_port(
-            "top", pad_width / 2 + 1j * (pad_height + gap) * 2, math.pi / 2
+            "squid", pad_width / 2 + 1j * (pad_height + gap / 2), math.pi / 2
         )
-        self.create_port(
-            "top_right", pad_width + 1j * (pad_height + gap) * 2, math.pi / 2
-        )
+
+    @property
+    def port_squid(self):
+        return self.ports["squid"]
 
     @property
     def port_bottom(self):
@@ -243,6 +262,103 @@ class HCoupler(elements.Element):
     @property
     def port_e(self):
         return self.ports["e"]
+
+
+@dataclass
+class YCouplerArgs:
+    couple_width: float = 40
+    connect_width: float = 36
+    couple_length: float = 150
+    connect_length: float = 1200
+    async_pad_length: float = 960
+    async_pad_width: float = 60
+    async_pad_gap: float = 60
+    fillet_radius: float = 10
+
+
+class YCoupler(elements.Element):
+    def __init__(
+        self, args: YCouplerArgs | None = None, config: config.Config | None = None
+    ):
+        super().__init__(config=config)
+        if args is None:
+            args = YCouplerArgs()
+        self.args = args
+        self._init_cell()
+
+    def _init_cell(self):
+        c = self.config
+        args = self.args
+        p_y1 = args.couple_length * (1 + 1j)
+        path_y1 = gdstk.FlexPath(
+            [p_y1 + args.connect_width / 2, p_y1 - args.couple_length],
+            args.couple_width,
+            **c.LD_AL_INNER
+        )
+        path_y2 = gdstk.FlexPath(
+            [p_y1 + args.connect_width / 2 * 1j, p_y1 - args.couple_length * 1j],
+            args.couple_width,
+            **c.LD_AL_INNER
+        )
+        p_y2 = p_y1 + cmath.rect(args.connect_length, math.pi / 4)
+        path_y3 = gdstk.FlexPath(
+            [p_y2 - args.connect_width / 2 * 1j, p_y2 + args.couple_length * 1j],
+            args.couple_width,
+            **c.LD_AL_INNER
+        )
+        path_y4 = gdstk.FlexPath(
+            [p_y2 - args.connect_width / 2, p_y2 + args.couple_length],
+            args.couple_width,
+            **c.LD_AL_INNER
+        )
+        path_connect = gdstk.FlexPath([p_y1, p_y2], args.connect_width, **c.LD_AL_INNER)
+
+        p_pad_center = (p_y1 + p_y2) / 2 + cmath.rect(
+            args.async_pad_gap + (args.connect_width + args.async_pad_width) / 2,
+            -math.pi / 4,
+        )
+        v_pad = cmath.rect(args.async_pad_length, math.pi / 4)
+        path_pad = gdstk.FlexPath(
+            [p_pad_center - v_pad / 2, p_pad_center + v_pad / 2],
+            args.async_pad_width,
+            **c.LD_AL_INNER
+        )
+
+        poly_inner = gdstk.boolean(
+            [path_y1, path_y2, path_y3, path_y4, path_connect, path_pad],
+            [],
+            "or",
+            **c.LD_AL_INNER
+        )
+        for p in poly_inner:
+            p.fillet(args.fillet_radius, tolerance=c.tolerance)
+        self.cell.add(*poly_inner)
+
+        p_squid = (p_y1 + p_y2) / 2 + cmath.rect(
+            (args.connect_width + args.async_pad_gap) / 2, -math.pi / 4
+        )
+        self.create_port("squid", p_squid, -math.pi / 4)
+        self.create_port("center", (p_y1 + p_y2) / 2, -3 / 4 * math.pi)
+        self.create_port(
+            "sw", p_y1 - args.couple_width / 2 * (1 + 1j), -3 / 4 * math.pi
+        )
+        self.create_port("ne", p_y2 + args.couple_width / 2 * (1 + 1j), 1 / 4 * math.pi)
+
+    @property
+    def port_center(self):
+        return self.ports["center"]
+
+    @property
+    def port_squid(self):
+        return self.ports["squid"]
+
+    @property
+    def port_sw(self):
+        return self.ports["sw"]
+
+    @property
+    def port_ne(self):
+        return self.ports["ne"]
 
 
 if __name__ == "__main__":

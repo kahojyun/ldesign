@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 
 import gdstk
 import numpy as np
-from ldesign import config, elements
+from ldesign import config, elements, utils
 from ldesign.shapes.path import CpwArgs
 
 
@@ -12,6 +12,7 @@ class TPadArgs:
     pad_width: float = 274
     pad_height: float = 30
     fillet_radius: float = 5
+    with_gap: bool = True
 
 
 class TPad(elements.Element):
@@ -34,47 +35,35 @@ class TPad(elements.Element):
         fillet_radius = args.fillet_radius
         ld_inner = self.config.LD_AL_INNER
         ld_gap = self.config.LD_AL_GAP
+        extend_len = max(fillet_radius, line_gap)
         region = gdstk.rectangle(
             (-pad_width / 2 - line_gap, -line_gap),
-            (pad_width / 2 + line_gap, pad_height + line_gap + fillet_radius),
+            (pad_width / 2 + line_gap, pad_height + extend_len),
         )
-        pad_inner = gdstk.Polygon(
-            [
-                (pad_width / 2, 0),
-                (pad_width / 2, pad_height),
-                (line_width / 2, pad_height),
-                (line_width / 2, pad_height + fillet_radius * 2),
-                (-line_width / 2, pad_height + fillet_radius * 2),
-                (-line_width / 2, pad_height),
-                (-pad_width / 2, pad_height),
-                (-pad_width / 2, 0),
-            ],
-            **ld_inner
-        )
-        pad_inner.fillet(fillet_radius)
+        pad_inner = [
+            gdstk.rectangle(-pad_width / 2 + 0j, pad_width / 2 + pad_height * 1j),
+            gdstk.rectangle(
+                -line_width / 2 + pad_height * 1j,
+                line_width / 2 + (pad_height + extend_len + fillet_radius) * 1j,
+            ),
+        ]
+        pad_inner = gdstk.boolean(pad_inner, [], "or", **ld_inner)
+        utils.fillet_polygons(pad_inner, fillet_radius, self.config.tolerance)
         pad_inner = gdstk.boolean(region, pad_inner, "and", **ld_inner)
-        pad_outer = gdstk.Polygon(
-            [
-                (pad_width / 2 + line_gap, -line_gap),
-                (pad_width / 2 + line_gap, pad_height + line_gap),
-                (line_width / 2 + line_gap, pad_height + line_gap),
-                (line_width / 2 + line_gap, pad_height + line_gap + fillet_radius * 2),
-                (-line_width / 2 - line_gap, pad_height + line_gap + fillet_radius * 2),
-                (-line_width / 2 - line_gap, pad_height + line_gap),
-                (-pad_width / 2 - line_gap, pad_height + line_gap),
-                (-pad_width / 2 - line_gap, -line_gap),
-            ],
-            **ld_gap
-        )
-        pad_outer.fillet(fillet_radius)
-        pad_outer = gdstk.boolean(region, pad_outer, "and", **ld_gap)
-        pad_outer = gdstk.boolean(pad_outer, pad_inner, "not", **ld_gap)
         self.cell.add(*pad_inner)
-        self.cell.add(*pad_outer)
-        self.create_port("line", pad_height * 1j, np.pi / 2)
-        self.create_port("pad_center", -line_gap * 1j, 3 * np.pi / 2)
-        self.create_port("pad_right", pad_width / 2 - line_gap * 1j, 3 * np.pi / 2)
-        self.create_port("pad_left", -pad_width / 2 - line_gap * 1j, 3 * np.pi / 2)
+        if args.with_gap:
+            pad_gap = gdstk.offset(pad_inner, line_gap, **ld_gap)
+            pad_gap = gdstk.boolean(region, pad_gap, "and", **ld_gap)
+            pad_gap = gdstk.boolean(pad_gap, pad_inner, "not", **ld_gap)
+            self.cell.add(*pad_gap)
+            self.create_port("pad_center", -line_gap * 1j, 3 * np.pi / 2)
+            self.create_port("pad_right", pad_width / 2 - line_gap * 1j, 3 * np.pi / 2)
+            self.create_port("pad_left", -pad_width / 2 - line_gap * 1j, 3 * np.pi / 2)
+        else:
+            self.create_port("pad_center", 0j, 3 * np.pi / 2)
+            self.create_port("pad_right", pad_width / 2 + 0j, 3 * np.pi / 2)
+            self.create_port("pad_left", -pad_width / 2 + 0j, 3 * np.pi / 2)
+        self.create_port("line", (pad_height + extend_len) * 1j, np.pi / 2)
 
     @property
     def port_line(self):
@@ -91,3 +80,8 @@ class TPad(elements.Element):
     @property
     def port_pad_left(self):
         return self.ports["pad_left"]
+
+
+if __name__ == "__main__":
+    # config.use_preset_design()
+    TPad(TPadArgs(with_gap=False)).view()

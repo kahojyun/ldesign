@@ -19,6 +19,7 @@ class JunctionPadArgs:
     jpad_length: float = 6.5
     jpad_top_margin: float = 1
     jpad_side_margin: float = 1
+    base_offset: float = 0
 
 
 @dataclass
@@ -102,7 +103,7 @@ class JunctionPad(elements.Element):
             args.base_width / 2 + 0j,
             -args.base_width / 2 + args.base_length * 1j,
             **self.config.LD_AL_INNER,
-        )
+        ).translate(args.base_offset + 0j)
 
         bandage_width = args.base_width - 2 * args.bandage_side_margin
         bandage_top_right = (
@@ -409,5 +410,19 @@ class SquareSquid(elements.Element):
 
 if __name__ == "__main__":
     config.use_preset_design()
-    elem = SquareSquid(SquareSquidArgs(j_width1=0.2, j_width2=0.2))
+    elem = SquareSquid(
+        SquareSquidArgs(
+            pad=JunctionPadArgs(
+                base_width=3,
+                base_length=40,
+                bandage_length=10,
+                bandage_top_margin=-4,
+                bandage_side_margin=0.5,
+                jpad_length=8,
+                jpad_top_margin=5,
+                jpad_side_margin=0.5,
+            ),
+        )
+    )
+    # elem = SquareSquid(SquareSquidArgs(j_width1=0.2, j_width2=0.2))
     elem.view()

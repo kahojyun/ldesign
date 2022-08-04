@@ -1,5 +1,5 @@
-import cmath
 import math
+from itertools import product
 from typing import Sequence
 
 import gdstk
@@ -113,6 +113,7 @@ class Chip96Ports(elements.Element):
         fc_width: float,
         support_width: float,
         support_gap: float,
+        marker_offset: complex,
         fc_config: config.Config,
     ):
         fc_boundary = boundary.Boundary(
@@ -121,25 +122,35 @@ class Chip96Ports(elements.Element):
         self.add_element(
             fc_boundary, self.port_center, fc_boundary.port_center, match_angle=False
         )
+        center_point = self.port_center.point
+        # Add support
         support = gdstk.rectangle(
             -support_width * (1 + 1j) / 2,
             support_width * (1 + 1j) / 2,
             **self.config.LD_SUPPORT
         )
-        center_point = self.port_center.point
-        fc_marker = FlipChipMarker(config=self.config, config2=fc_config)
-        for i in range(4):
-            a = math.pi / 2 * i
+        for sign, flip in product([1, -1], [False, True]):
             v = (fc_width / 2 - support_gap - support_width / 2) * (1 + 1j)
-            v *= cmath.rect(1, a)
+            if flip:
+                v = v.conjugate()
+            v *= sign
             s = support.copy().translate(center_point + v)
             self.cell.add(s)
-            v = (fc_width / 2 - support_gap - support_width / 4) * (1 + 1j)
-            v *= cmath.rect(1, a)
+        # Add marker
+        fc_marker = FlipChipMarker(config=self.config, config2=fc_config)
+        for sign, flip in product([1, -1], [False, True]):
+            v = (fc_width / 2 - support_gap - support_width / 4) * (
+                1 + 1j
+            ) + marker_offset
+            if flip:
+                v = v.conjugate()
+            v *= sign
             self.add_element(
                 fc_marker,
                 ref_port=elements.DockingPort(center_point + v),
-                transformation=elements.Transformation(rotation=a),
+                transformation=elements.Transformation(
+                    rotation=math.pi if sign == 1 else 0, x_reflection=flip
+                ),
             )
 
 
@@ -158,7 +169,7 @@ if __name__ == "__main__":
     fc_config.LD_BRIDGE_VIA = {"layer": 100, "datatype": 1}
     fc_config.LD_LABEL = {"layer": 0, "texttype": 0}
     c = Chip96Ports()
-    c.add_flip_chip(14000, 2000, 350, fc_config)
+    c.add_flip_chip(14000, 2000, 350, -2000 + 0j, fc_config)
     # xy_pad = bondpad.BondPad()
     # ro_pad = bondpad.BondPad(bondpad.BondPadArgs(path.CpwArgs(10, 6)))
     # pads = [xy_pad] * 24

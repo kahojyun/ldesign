@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import cmath
 import math
+from typing import Sequence
+
+import gdstk
 
 from ldesign import elements
 
@@ -33,6 +36,18 @@ def find_intersection(
     if check_direction and (a < 1e-5 or b < 1e-5):
         raise ValueError("wrong direction")
     return p1 + a * v1
+
+
+def fillet_polygons(
+    polygons: gdstk.Polygon | Sequence[gdstk.Polygon],
+    radius: float,
+    tolerance: float = 1e-3,
+):
+    if isinstance(polygons, gdstk.Polygon):
+        polygons.fillet(radius, tolerance)
+        return
+    for poly in polygons:
+        poly.fillet(radius, tolerance)
 
 
 if __name__ == "__main__":
