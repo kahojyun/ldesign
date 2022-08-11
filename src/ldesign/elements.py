@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import cmath
 import copy
+import logging
 import operator
-import os
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import reduce
+from tempfile import TemporaryDirectory
 from typing import ClassVar, Optional, TypeVar
 
 import gdspy
@@ -17,6 +18,7 @@ import numpy as np
 from ldesign.config import Config, global_config
 from ldesign.utils import to_complex
 
+logger = logging.getLogger(__name__)
 _Transformable = TypeVar("_Transformable", "Transformation", "DockingPort", complex)
 
 
@@ -504,12 +506,12 @@ class Element:
 
     def view(self):
         """Open a GUI to view the element."""
-        filename = f"{uuid.uuid4()}.gds"
-        self.write_gds(filename, flatten=False)
-
-        lib = gdspy.GdsLibrary(infile=filename)
-        gdspy.LayoutViewer(library=lib)
-        os.remove(filename)
+        with TemporaryDirectory() as tmpdir:
+            filename = f"{tmpdir}/{uuid.uuid4()}.gds"
+            logger.debug("Creating temp gds file for viewing: %s", filename)
+            self.write_gds(filename, flatten=False)
+            lib = gdspy.GdsLibrary(infile=filename)
+            gdspy.LayoutViewer(library=lib)
 
     def write_gds(
         self,
