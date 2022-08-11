@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from itertools import product
 
 import gdstk
+
 import ldesign
 from ldesign import config, elements
 

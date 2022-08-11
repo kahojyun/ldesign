@@ -25,12 +25,8 @@ dependencies = [
 ]
 dynamic = ["version"]
 
-[project.optional-dependencies]
-dev = ["black"]
-
 [project.urls]
-"Homepage" = "https://github.com/kahojyun/ldesign"
+repository = "https://github.com/kahojyun/ldesign"
 "Bug Tracker" = "https://github.com/kahojyun/ldesign/issues"
 
 [tool.setuptools_scm]
-write_to = "src/ldesign/_version.py"

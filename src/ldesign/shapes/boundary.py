@@ -3,6 +3,7 @@ from itertools import product
 
 import gdstk
 import numpy as np
+
 from ldesign import config, elements
 from ldesign.shapes.marker import Marker, MarkerArgs
 

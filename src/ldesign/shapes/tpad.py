@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 import gdstk
 import numpy as np
+
 from ldesign import config, elements, utils
 from ldesign.shapes.path import CpwArgs
 

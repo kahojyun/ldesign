@@ -2,8 +2,9 @@ import math
 from dataclasses import dataclass, field
 
 import gdstk
-import ldesign
 import numpy as np
+
+import ldesign
 from ldesign import config, elements
 
 

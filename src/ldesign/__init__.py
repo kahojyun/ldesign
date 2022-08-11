@@ -1,4 +1,12 @@
+from importlib.metadata import PackageNotFoundError, version
+
 from . import calculation, config, elements, path, planning, shapes, utils
-from .elements import Element, Transformation, DockingPort
 from .config import Config
-from ._version import __version__, __version_tuple__
+from .elements import DockingPort, Element, Transformation
+
+# from setuptools-scm docs
+try:
+    __version__ = version("ldesign")
+except PackageNotFoundError:
+    # package is not installed
+    pass
