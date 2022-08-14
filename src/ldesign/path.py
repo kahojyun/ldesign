@@ -41,6 +41,12 @@ class PathOptions:
     parent_element: elements.Element | None = None
     first_bridge: float | None = None
     bridge_spacing: float | None = None
+    cover_bridge: bool = False
+    cover_bridge_sub_margin: float = 5
+    cover_bridge_top_margin: float = 3
+    cover_bridge_leg_margin: float = 11
+    cover_bridge_hole_size: float = 3
+    cover_bridge_leg_size: float = 5
 
 
 class PathOp:
@@ -168,29 +174,6 @@ class BalancedMeanderOp(PathOp):
         else:
             length += (self.n_turn + 1) * (self.width - self.calc_min_width())
         return length
-
-
-def _create_gdstk_path(pos: complex, cfg: config.Config, cpw: CpwArgs):
-    return gdstk.RobustPath(
-        to_complex(pos),
-        [cpw.width, cpw.gap, cpw.gap],
-        [
-            0,
-            (cpw.width + cpw.gap) / 2,
-            -(cpw.width + cpw.gap) / 2,
-        ],
-        layer=[
-            cfg.LD_AL_INNER["layer"],
-            cfg.LD_AL_GAP["layer"],
-            cfg.LD_AL_GAP["layer"],
-        ],
-        datatype=[
-            cfg.LD_AL_INNER["datatype"],
-            cfg.LD_AL_GAP["datatype"],
-            cfg.LD_AL_GAP["datatype"],
-        ],
-        tolerance=cfg.tolerance,
-    )
 
 
 def is_zero_len(v: complex) -> bool:
@@ -767,19 +750,71 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
         v = point - self.current_pos
 
         if not is_zero_len(v):
-            if self.bridge_spacing > 0:
-                # make bridge
-                left_len = abs(v)
-                self.bridge_len_traker = max(0, self.bridge_len_traker)
-                while left_len > self.bridge_len_traker:
-                    left_len -= self.bridge_len_traker
-                    self.bridge_len_traker = self.bridge_spacing
-                    bridge_point = point - v * left_len / abs(v)
-                    bridge_angle = cmath.phase(v)
-                    self._make_bridge(bridge_point, bridge_angle)
-                self.bridge_len_traker -= left_len
+            self._add_bridge_segment(point, v)
             self.current_path.segment(point)
         super()._segment_inner(point)
+
+    def _add_bridge_segment(self, point: complex, v: complex):
+        opts = self.options
+        if opts.cover_bridge:
+            leg_width = opts.cover_bridge_leg_margin - opts.cover_bridge_top_margin
+            leg_len = opts.cover_bridge_leg_size
+            cpw_width = opts.cpw.width + opts.cpw.gap * 2
+            angle = cmath.phase(v)
+            leg_poly = (
+                gdstk.rectangle(0j, leg_len + leg_width * 1j, **self.cfg.LD_BRIDGE)
+                .translate((opts.cover_bridge_top_margin + cpw_width / 2) * 1j)
+                .rotate(angle)
+                .translate(self.current_pos)
+            )
+
+            d = opts.cover_bridge_hole_size + opts.cover_bridge_leg_size
+            n_leg = math.floor(abs(v) / d)
+            if n_leg > 0:
+                leg_poly.repetition = gdstk.Repetition(
+                    n_leg,
+                    2,
+                    v1=cmath.rect(d, angle),
+                    v2=cmath.rect(
+                        cpw_width
+                        + opts.cover_bridge_leg_margin
+                        + opts.cover_bridge_top_margin,
+                        angle - math.pi / 2,
+                    ),
+                )
+                self.cpw.cell.add(leg_poly)
+            final_leg_point = self.current_pos + cmath.rect(d * n_leg, angle)
+            final_leg_len = min(leg_len, abs(v) - d * n_leg)
+            final_leg_poly = (
+                gdstk.rectangle(
+                    0j, final_leg_len + leg_width * 1j, **self.cfg.LD_BRIDGE
+                )
+                .translate((opts.cover_bridge_top_margin + cpw_width / 2) * 1j)
+                .rotate(angle)
+                .translate(final_leg_point)
+            )
+            final_leg_poly.repetition = gdstk.Repetition(
+                1,
+                2,
+                v1=cmath.rect(d, angle),
+                v2=cmath.rect(
+                    cpw_width
+                    + opts.cover_bridge_leg_margin
+                    + opts.cover_bridge_top_margin,
+                    angle - math.pi / 2,
+                ),
+            )
+            self.cpw.cell.add(final_leg_poly)
+        if self.bridge_spacing > 0 and not opts.cover_bridge:
+            left_len = abs(v)
+            self.bridge_len_traker = max(0, self.bridge_len_traker)
+            while left_len > self.bridge_len_traker:
+                left_len -= self.bridge_len_traker
+                self.bridge_len_traker = self.bridge_spacing
+                bridge_point = point - v * left_len / abs(v)
+                bridge_angle = cmath.phase(v)
+                self._make_bridge(bridge_point, bridge_angle)
+            self.bridge_len_traker -= left_len
 
     def _turn_inner(self, radius: float, angle: float) -> None:
         self._ensure_path()
@@ -790,26 +825,76 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
                 current_angle = 0
             start_angle, final_angle = _get_arc_angle(current_angle, angle)
             self.current_path.arc(radius, start_angle, final_angle)
-            if self.bridge_spacing > 0:
-                # make bridge
-                left_angle = abs(angle)
-                point = self.current_pos
-                turn_center = point + cmath.rect(
-                    radius, current_angle + math.copysign(math.pi / 2, angle)
-                )
-                self.bridge_len_traker = max(0, self.bridge_len_traker)
-                while left_angle * radius > self.bridge_len_traker:
-                    left_angle -= self.bridge_len_traker / radius
-                    self.bridge_len_traker = self.bridge_spacing
-                    bridge_angle = (
-                        current_angle + angle - math.copysign(left_angle, angle)
-                    )
-                    bridge_point = turn_center - cmath.rect(
-                        radius, bridge_angle + math.copysign(math.pi / 2, angle)
-                    )
-                    self._make_bridge(bridge_point, bridge_angle)
-                self.bridge_len_traker -= left_angle * radius
+            self._add_bridge_turn(radius, angle, current_angle)
         super()._turn_inner(radius, angle)
+
+    def _add_bridge_turn(self, radius: float, angle: float, current_angle: float):
+        opts = self.options
+        turn_center = self.current_pos + cmath.rect(
+            radius, current_angle + math.copysign(math.pi / 2, angle)
+        )
+        if opts.cover_bridge:
+            leg_width = opts.cover_bridge_leg_margin - opts.cover_bridge_top_margin
+            cpw_width = opts.cpw.width + opts.cpw.gap * 2
+            for sign in [-1, 1]:
+                leg_radius = radius + sign * (
+                    cpw_width / 2 + opts.cover_bridge_top_margin
+                )
+                angle_per_leg = opts.cover_bridge_leg_size / leg_radius
+                angle_per_hole = opts.cover_bridge_hole_size / leg_radius
+                angle_per_sec = angle_per_leg + angle_per_hole
+                n_leg = math.floor(abs(angle) / angle_per_sec)
+                for i in range(n_leg):
+                    start_angle = current_angle + math.copysign(
+                        i * angle_per_sec, angle
+                    )
+                    start_point = turn_center - cmath.rect(
+                        leg_radius, start_angle + math.copysign(math.pi / 2, angle)
+                    )
+                    poly = gdstk.RobustPath(
+                        start_point,
+                        leg_width,
+                        -sign * math.copysign(leg_width / 2, angle),
+                        tolerance=self.cfg.tolerance,
+                        **self.cfg.LD_BRIDGE,
+                    )
+                    arc_start, arc_end = _get_arc_angle(
+                        start_angle, math.copysign(angle_per_leg, angle)
+                    )
+                    poly.arc(leg_radius, arc_start, arc_end)
+                    self.cpw.cell.add(poly)
+                final_leg_start_angle = current_angle + math.copysign(
+                    n_leg * angle_per_sec, angle
+                )
+                final_leg_start_point = turn_center - cmath.rect(
+                    leg_radius,
+                    final_leg_start_angle + math.copysign(math.pi / 2, angle),
+                )
+                final_leg_angle = min(abs(angle) - n_leg * angle_per_sec, angle_per_leg)
+                poly = gdstk.RobustPath(
+                    final_leg_start_point,
+                    leg_width,
+                    -sign * math.copysign(leg_width / 2, angle),
+                    tolerance=self.cfg.tolerance,
+                    **self.cfg.LD_BRIDGE,
+                )
+                arc_start, arc_end = _get_arc_angle(
+                    final_leg_start_angle, math.copysign(final_leg_angle, angle)
+                )
+                poly.arc(leg_radius, arc_start, arc_end)
+                self.cpw.cell.add(poly)
+        if self.bridge_spacing > 0 and not opts.cover_bridge:
+            left_angle = abs(angle)
+            self.bridge_len_traker = max(0, self.bridge_len_traker)
+            while left_angle * radius > self.bridge_len_traker:
+                left_angle -= self.bridge_len_traker / radius
+                self.bridge_len_traker = self.bridge_spacing
+                bridge_angle = current_angle + angle - math.copysign(left_angle, angle)
+                bridge_point = turn_center - cmath.rect(
+                    radius, bridge_angle + math.copysign(math.pi / 2, angle)
+                )
+                self._make_bridge(bridge_point, bridge_angle)
+            self.bridge_len_traker -= left_angle * radius
 
     def _process_op_crossover(
         self, next_op: CrossoverOp, pending_ops: deque[PathOp]
@@ -938,13 +1023,53 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
 
     def _ensure_path(self) -> None:
         if self.current_path is None:
-            path = _create_gdstk_path(self.current_pos, self.cfg, self.options.cpw)
-            self.cpw.cell.add(path)
-            self.current_path = path
+            self._start_new_path(self.current_pos)
+
+    def _start_new_path(self, pos: complex):
+        assert self.current_path is None
+        cfg = self.cfg
+        opts = self.options
+        cpw = opts.cpw
+        width_list = [cpw.width, cpw.gap, cpw.gap]
+        offset_list = [
+            0,
+            (cpw.width + cpw.gap) / 2,
+            -(cpw.width + cpw.gap) / 2,
+        ]
+        layer_list = [
+            cfg.LD_AL_INNER["layer"],
+            cfg.LD_AL_GAP["layer"],
+            cfg.LD_AL_GAP["layer"],
+        ]
+        datatype_list = [
+            cfg.LD_AL_INNER["datatype"],
+            cfg.LD_AL_GAP["datatype"],
+            cfg.LD_AL_GAP["datatype"],
+        ]
+        if opts.cover_bridge:
+            width_list.extend(
+                [
+                    cpw.width + 2 * (cpw.gap + opts.cover_bridge_sub_margin),
+                    cpw.width + 2 * (cpw.gap + opts.cover_bridge_top_margin),
+                ]
+            )
+            offset_list.extend([0, 0])
+            layer_list.extend([cfg.LD_BRIDGE_UNDER["layer"], cfg.LD_BRIDGE["layer"]])
+            datatype_list.extend(
+                [cfg.LD_BRIDGE_UNDER["datatype"], cfg.LD_BRIDGE["datatype"]]
+            )
+        path = gdstk.RobustPath(
+            to_complex(pos),
+            width_list,
+            offset_list,
+            layer=layer_list,
+            datatype=datatype_list,
+            tolerance=cfg.tolerance,
+        )
+        self.cpw.cell.add(path)
+        self.current_path = path
 
 
-# TODO support length mark in the middle of the path
-# lines go into ports except the start port
 class PathOpGenerator:
     """A helper class for generating `PathOp`.
 
@@ -1251,10 +1376,14 @@ def create_cpw_from_ops(
 
 if __name__ == "__main__":
     # logging.basicConfig(level=logging.DEBUG)
-    config.use_preset_design()
+    # config.use_preset_design()
     elem = elements.Element()
     testelem = ldesign.shapes.path.StraightCpw(40, CpwArgs(10, 50))
-    pathop_gen = PathOpGenerator(50 + 0j)
+    cpw = CpwArgs(4, 4)
+    options = PathOptions(
+        50, cpw, first_bridge=50, bridge_spacing=100, cover_bridge=True
+    )
+    pathop_gen = PathOpGenerator(50 + 0j, options=options)
     pathop_gen.segment(200 + 200j)
     pathop_gen.segment(200 + 500j)
     # pathop_gen.auto_meander(100, 1000, "auto", 50, 50, 50, None)
@@ -1267,8 +1396,6 @@ if __name__ == "__main__":
     pathop_gen.set_state(bridge_len_tracker=10)
     pathop_gen.balanced_meander(4, "center", first_turn="left")
     ops = pathop_gen.build()
-    cpw = CpwArgs(10, 6)
-    options = PathOptions(50, cpw, first_bridge=50, bridge_spacing=100)
     path = create_cpw_from_ops(ops, total_length=4500, options=options)
     elem.add_element(path)
     elem.view()
