@@ -7,7 +7,7 @@ import math
 from collections import deque
 from dataclasses import dataclass, field
 from itertools import pairwise, product
-from typing import Literal, Sequence, final
+from typing import Literal, Sequence
 
 import gdstk
 
@@ -47,6 +47,7 @@ class PathOptions:
     cover_bridge_leg_margin: float = 11
     cover_bridge_hole_size: float = 3
     cover_bridge_leg_size: float = 5
+    cover_bridge_leg_size_thres: float = 2
 
 
 class PathOp:
@@ -288,6 +289,15 @@ def _get_arc_angle(current_angle: float, turn_angle: float) -> tuple[float, floa
     return start_angle, final_angle
 
 
+def _check_cpw_final(pending_ops: deque[PathOp]):
+    if len(pending_ops) == 0:
+        return True
+    match pending_ops[0]:
+        case SegmentOp() | TurnOp() | AutoMeanderOp() | BalancedMeanderOp() | ExtendOp():
+            return False
+    return True
+
+
 class _BaseOpVisitor:
     start_pos: complex
     start_angle: float | None
@@ -340,26 +350,11 @@ class _BaseOpVisitor:
         self.current_angle = angle
         self.current_radius = radius
 
-    @final
-    def segment(self, point: complex) -> None:
-        self._ensure_started()
-        self._segment_inner(point)
-
-    @final
-    def extend(self, length: float) -> None:
-        self._ensure_started()
-        self._extend_inner(length)
-
-    @final
-    def turn(self, radius: float, angle: float) -> None:
-        self._ensure_started()
-        self._turn_inner(radius, angle)
-
     def _ensure_started(self) -> None:
         if not self.started:
             raise RuntimeError("Not started")
 
-    def _segment_inner(self, point: complex) -> None:
+    def _segment_inner(self, point: complex, final: bool) -> None:
         v = point - self.current_pos
         if not is_zero_len(v):
             new_angle = cmath.phase(v)
@@ -368,7 +363,7 @@ class _BaseOpVisitor:
             self.current_pos = point
             self.current_angle = new_angle
 
-    def _extend_inner(self, length: float) -> None:
+    def _extend_inner(self, length: float, final: bool) -> None:
         if not is_zero_len(length):
             if length < 0:
                 raise ValueError
@@ -376,9 +371,9 @@ class _BaseOpVisitor:
             if current_angle is None:
                 current_angle = 0
             next_pos = self.current_pos + cmath.rect(length, current_angle)
-            self._segment_inner(next_pos)
+            self._segment_inner(next_pos, final)
 
-    def _turn_inner(self, radius: float, angle: float) -> None:
+    def _turn_inner(self, radius: float, angle: float, final: bool) -> None:
         if not is_zero_angle(angle):
             if self.current_angle is None:
                 self.current_angle = 0
@@ -418,6 +413,7 @@ class _BaseOpVisitor:
     def _process_op_segment(
         self, next_op: SegmentOp, pending_ops: deque[PathOp]
     ) -> None:
+        final = _check_cpw_final(pending_ops)
         match next_op:
             case SegmentOp(
                 point=elements.DockingPort() as next_port,
@@ -427,6 +423,7 @@ class _BaseOpVisitor:
                 self._process_segment_to_port(
                     next_port,
                     next_radius,
+                    final,
                 )
             case SegmentOp(point=complex() as next_pos, radius=next_radius):
                 future_op = None
@@ -446,19 +443,26 @@ class _BaseOpVisitor:
                         future_point = future_port.point
                         future_angle = future_port.angle + math.pi
                 self._process_segment_to_point(
-                    next_pos, next_radius, future_point, future_angle, future_radius
+                    next_pos,
+                    next_radius,
+                    future_point,
+                    future_angle,
+                    future_radius,
+                    final,
                 )
 
     def _process_op_extend(self, next_op: ExtendOp, pending_ops: deque[PathOp]) -> None:
-        self._extend_inner(next_op.length)
+        final = _check_cpw_final(pending_ops)
+        self._extend_inner(next_op.length, final)
 
     def _process_op_turn(self, next_op: TurnOp, pending_ops: deque[PathOp]) -> None:
-        self._turn_inner(next_op.radius, next_op.angle)
+        final = _check_cpw_final(pending_ops)
+        self._turn_inner(next_op.radius, next_op.angle, final)
 
     def _process_segment_to_port(
-        self, port: elements.DockingPort, radius: float
+        self, port: elements.DockingPort, radius: float, final: bool
     ) -> None:
-        self._to_port_helper(port.point, port.angle + math.pi, radius)
+        self._to_port_helper(port.point, port.angle + math.pi, radius, final)
         self.current_pos = port.point
         self.current_angle = (port.angle + math.pi) % (2 * math.pi)
         self.current_radius = radius
@@ -470,15 +474,15 @@ class _BaseOpVisitor:
         future_point: complex | None,
         future_angle: float | None,
         future_radius: float | None,
+        final: bool,
     ) -> None:
-        self._to_point_helper(point, radius, future_point, future_angle, future_radius)
+        self._to_point_helper(
+            point, radius, future_point, future_angle, future_radius, final
+        )
         self.current_radius = radius
 
     def _to_port_helper(
-        self,
-        next_pos: complex,
-        next_angle: float,
-        next_radius: float,
+        self, next_pos: complex, next_angle: float, next_radius: float, final: bool
     ) -> None:
         current_pos = self.current_pos
         current_angle = self.current_angle
@@ -488,20 +492,20 @@ class _BaseOpVisitor:
             return
         if current_angle is None or is_zero_len(current_radius):
             if is_zero_len(next_radius):
-                self.segment(next_pos)
+                self._segment_inner(next_pos, final)
                 return
             turn_pos, turn_angle = _solve_to_single_circle(
                 current_pos, next_pos, next_angle, next_radius
             )
-            self.segment(turn_pos)
-            self.turn(next_radius, turn_angle)
+            self._segment_inner(turn_pos, final)
+            self._turn_inner(next_radius, turn_angle, final)
             return
         if is_zero_len(next_radius):
             turn_pos, turn_angle = _solve_to_single_circle(
                 next_pos, current_pos, current_angle + math.pi, current_radius
             )
-            self.turn(current_radius, -turn_angle)
-            self.segment(next_pos)
+            self._turn_inner(current_radius, -turn_angle, final)
+            self._segment_inner(next_pos, final)
             return
         # (turn_angle_a, turn_angle_b, seg_a, seg_b)
         results = _solve_to_two_circle(
@@ -514,9 +518,9 @@ class _BaseOpVisitor:
         )
         assert len(results) > 0
         turn_angle_a, turn_angle_b, _, seg_b = results[0]
-        self.turn(current_radius, turn_angle_a)
-        self.segment(seg_b)
-        self.turn(next_radius, turn_angle_b)
+        self._turn_inner(current_radius, turn_angle_a, final)
+        self._segment_inner(seg_b, final)
+        self._turn_inner(next_radius, turn_angle_b, final)
 
     def _to_point_helper(
         self,
@@ -525,6 +529,7 @@ class _BaseOpVisitor:
         future_pos: complex | None,
         future_angle: float | None,
         future_radius: float | None,
+        final: bool,
     ) -> None:
         if self.current_angle is None or is_zero_len(self.current_radius):
             start_pos = self.current_pos
@@ -535,9 +540,9 @@ class _BaseOpVisitor:
                 self.current_angle + math.pi,
                 self.current_radius,
             )
-            self.turn(self.current_radius, -turn_angle)
+            self._turn_inner(self.current_radius, -turn_angle, final)
         if is_zero_len(next_radius) or future_pos is None:
-            self.segment(next_pos)
+            self._segment_inner(next_pos, final)
             return
         if future_angle is None or future_radius is None or is_zero_len(future_radius):
             end_pos = future_pos
@@ -556,8 +561,8 @@ class _BaseOpVisitor:
         if (abs(vec1) < arc_len - LEN_ERR) or (abs(vec2) < arc_len - LEN_ERR):
             raise Exception
         arc_start = next_pos - vec1 / abs(vec1) * arc_len
-        self.segment(arc_start)
-        self.turn(next_radius, turn_angle)
+        self._segment_inner(arc_start, final)
+        self._turn_inner(next_radius, turn_angle, final)
 
     def _process_op_crossover(
         self, next_op: CrossoverOp, pending_ops: deque[PathOp]
@@ -633,16 +638,16 @@ class LengthTracker(_BaseOpVisitor):
         self.total_length = 0
         self.op_lens = []
 
-    def _segment_inner(self, point: complex) -> None:
+    def _segment_inner(self, point: complex, final: bool) -> None:
         v = point - self.current_pos
         if not is_zero_len(v):
             self.total_length += abs(v)
-        super()._segment_inner(point)
+        super()._segment_inner(point, final)
 
-    def _turn_inner(self, radius: float, angle: float) -> None:
+    def _turn_inner(self, radius: float, angle: float, final: bool) -> None:
         if not is_zero_angle(angle):
             self.total_length += radius * abs(angle)
-        super()._turn_inner(radius, angle)
+        super()._turn_inner(radius, angle, final)
 
     def _process_op_segment(
         self, next_op: SegmentOp, pending_ops: deque[PathOp]
@@ -705,6 +710,7 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
     current_path: gdstk.RobustPath | None
     cfg: config.Config
     bridge_len_traker: float
+    cover_bridge_offset: float
     bridge_spacing: float
     _bridge: crossover.Bridge | None = None
 
@@ -719,6 +725,8 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
             cfg = config.global_config
         self.cfg = cfg
         self.cpw = elements.CpwWaveguide(cfg)
+        # setup bridge
+        self.cover_bridge_offset = 0
         if self.options.bridge_spacing is not None:
             self.bridge_spacing = self.options.bridge_spacing
             if self.options.first_bridge is not None:
@@ -744,37 +752,39 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
             elements.Transformation(rotation=math.pi / 2),
         )
 
-    def _segment_inner(self, point: complex) -> None:
+    def _segment_inner(self, point: complex, final: bool) -> None:
         self._ensure_path()
         assert self.current_path is not None
         v = point - self.current_pos
 
         if not is_zero_len(v):
-            self._add_bridge_segment(point, v)
+            self._add_bridge_segment(point, v, final)
             self.current_path.segment(point)
-        super()._segment_inner(point)
+        super()._segment_inner(point, final)
 
-    def _add_bridge_segment(self, point: complex, v: complex):
+    def _add_bridge_segment(self, point: complex, v: complex, final: bool):
         opts = self.options
         if opts.cover_bridge:
             leg_width = opts.cover_bridge_leg_margin - opts.cover_bridge_top_margin
             leg_len = opts.cover_bridge_leg_size
+            hole_len = opts.cover_bridge_hole_size
+            sec_len = leg_len + hole_len
             cpw_width = opts.cpw.width + opts.cpw.gap * 2
             angle = cmath.phase(v)
-            leg_poly = (
-                gdstk.rectangle(0j, leg_len + leg_width * 1j, **self.cfg.LD_BRIDGE)
-                .translate((opts.cover_bridge_top_margin + cpw_width / 2) * 1j)
-                .rotate(angle)
-                .translate(self.current_pos)
-            )
 
-            d = opts.cover_bridge_hole_size + opts.cover_bridge_leg_size
-            n_leg = math.floor(abs(v) / d)
-            if n_leg > 0:
+            def add_leg_to_cell(offset, length, n):
+                if length < opts.cover_bridge_leg_size_thres:
+                    return
+                leg_poly = (
+                    gdstk.rectangle(0j, length + leg_width * 1j, **self.cfg.LD_BRIDGE)
+                    .translate((opts.cover_bridge_top_margin + cpw_width / 2) * 1j)
+                    .rotate(angle)
+                    .translate(cmath.rect(offset, angle) + self.current_pos)
+                )
                 leg_poly.repetition = gdstk.Repetition(
-                    n_leg,
+                    n,
                     2,
-                    v1=cmath.rect(d, angle),
+                    v1=cmath.rect(sec_len, angle),
                     v2=cmath.rect(
                         cpw_width
                         + opts.cover_bridge_leg_margin
@@ -783,28 +793,27 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
                     ),
                 )
                 self.cpw.cell.add(leg_poly)
-            final_leg_point = self.current_pos + cmath.rect(d * n_leg, angle)
-            final_leg_len = min(leg_len, abs(v) - d * n_leg)
-            final_leg_poly = (
-                gdstk.rectangle(
-                    0j, final_leg_len + leg_width * 1j, **self.cfg.LD_BRIDGE
-                )
-                .translate((opts.cover_bridge_top_margin + cpw_width / 2) * 1j)
-                .rotate(angle)
-                .translate(final_leg_point)
-            )
-            final_leg_poly.repetition = gdstk.Repetition(
-                1,
-                2,
-                v1=cmath.rect(d, angle),
-                v2=cmath.rect(
-                    cpw_width
-                    + opts.cover_bridge_leg_margin
-                    + opts.cover_bridge_top_margin,
-                    angle - math.pi / 2,
-                ),
-            )
-            self.cpw.cell.add(final_leg_poly)
+
+            # leg array in middle
+            leg_array_offset = self.cover_bridge_offset % sec_len
+            n_leg = math.floor((abs(v) - leg_array_offset) / sec_len)
+            if n_leg > 0:
+                add_leg_to_cell(leg_array_offset, leg_len, n_leg)
+
+            # first leg
+            if self.cover_bridge_offset < 0:
+                assert self.cover_bridge_offset + leg_len >= 0
+                add_leg_to_cell(0, min(leg_len + self.cover_bridge_offset, abs(v)), 1)
+
+            # final leg
+            final_leg_offset = sec_len * n_leg + leg_array_offset
+            left_len = abs(v) - final_leg_offset
+            if left_len > 0:
+                add_leg_to_cell(final_leg_offset, min(left_len, leg_len), 1)
+            self.cover_bridge_offset = (self.cover_bridge_offset - abs(v)) % sec_len
+            if self.cover_bridge_offset > hole_len:
+                self.cover_bridge_offset -= sec_len
+            return
         if self.bridge_spacing > 0 and not opts.cover_bridge:
             left_len = abs(v)
             self.bridge_len_traker = max(0, self.bridge_len_traker)
@@ -816,7 +825,7 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
                 self._make_bridge(bridge_point, bridge_angle)
             self.bridge_len_traker -= left_len
 
-    def _turn_inner(self, radius: float, angle: float) -> None:
+    def _turn_inner(self, radius: float, angle: float, final: bool) -> None:
         self._ensure_path()
         assert self.current_path is not None
         if not is_zero_angle(angle):
@@ -825,10 +834,12 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
                 current_angle = 0
             start_angle, final_angle = _get_arc_angle(current_angle, angle)
             self.current_path.arc(radius, start_angle, final_angle)
-            self._add_bridge_turn(radius, angle, current_angle)
-        super()._turn_inner(radius, angle)
+            self._add_bridge_turn(radius, angle, current_angle, final)
+        super()._turn_inner(radius, angle, final)
 
-    def _add_bridge_turn(self, radius: float, angle: float, current_angle: float):
+    def _add_bridge_turn(
+        self, radius: float, angle: float, current_angle: float, final: bool
+    ):
         opts = self.options
         turn_center = self.current_pos + cmath.rect(
             radius, current_angle + math.copysign(math.pi / 2, angle)
@@ -836,53 +847,66 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
         if opts.cover_bridge:
             leg_width = opts.cover_bridge_leg_margin - opts.cover_bridge_top_margin
             cpw_width = opts.cpw.width + opts.cpw.gap * 2
-            for sign in [-1, 1]:
-                leg_radius = radius + sign * (
-                    cpw_width / 2 + opts.cover_bridge_top_margin
+            leg_len = opts.cover_bridge_leg_size
+            hole_len = opts.cover_bridge_hole_size
+            sec_len = leg_len + hole_len
+
+            def add_leg_to_cell(leg_radius, angle_offset, leg_angle, sign):
+                if angle_offset + leg_angle <= 0 or angle_offset >= abs(angle):
+                    return
+                # cliping
+                if angle_offset < 0:
+                    leg_angle += angle_offset
+                    angle_offset = 0
+                if angle_offset + leg_angle > abs(angle):
+                    leg_angle = abs(angle) - angle_offset
+                if leg_angle * leg_radius < opts.cover_bridge_leg_size_thres:
+                    return
+                if is_zero_angle(leg_angle):
+                    return
+                start_angle = current_angle + math.copysign(angle_offset, angle)
+                start_point = turn_center - cmath.rect(
+                    leg_radius, start_angle + math.copysign(math.pi / 2, angle)
                 )
-                angle_per_leg = opts.cover_bridge_leg_size / leg_radius
-                angle_per_hole = opts.cover_bridge_hole_size / leg_radius
-                angle_per_sec = angle_per_leg + angle_per_hole
-                n_leg = math.floor(abs(angle) / angle_per_sec)
-                for i in range(n_leg):
-                    start_angle = current_angle + math.copysign(
-                        i * angle_per_sec, angle
-                    )
-                    start_point = turn_center - cmath.rect(
-                        leg_radius, start_angle + math.copysign(math.pi / 2, angle)
-                    )
-                    poly = gdstk.RobustPath(
-                        start_point,
-                        leg_width,
-                        -sign * math.copysign(leg_width / 2, angle),
-                        tolerance=self.cfg.tolerance,
-                        **self.cfg.LD_BRIDGE,
-                    )
-                    arc_start, arc_end = _get_arc_angle(
-                        start_angle, math.copysign(angle_per_leg, angle)
-                    )
-                    poly.arc(leg_radius, arc_start, arc_end)
-                    self.cpw.cell.add(poly)
-                final_leg_start_angle = current_angle + math.copysign(
-                    n_leg * angle_per_sec, angle
-                )
-                final_leg_start_point = turn_center - cmath.rect(
-                    leg_radius,
-                    final_leg_start_angle + math.copysign(math.pi / 2, angle),
-                )
-                final_leg_angle = min(abs(angle) - n_leg * angle_per_sec, angle_per_leg)
                 poly = gdstk.RobustPath(
-                    final_leg_start_point,
+                    start_point,
                     leg_width,
                     -sign * math.copysign(leg_width / 2, angle),
                     tolerance=self.cfg.tolerance,
                     **self.cfg.LD_BRIDGE,
                 )
                 arc_start, arc_end = _get_arc_angle(
-                    final_leg_start_angle, math.copysign(final_leg_angle, angle)
+                    start_angle, math.copysign(leg_angle, angle)
                 )
                 poly.arc(leg_radius, arc_start, arc_end)
                 self.cpw.cell.add(poly)
+
+            total_final_offset = 0
+            for sign in [-1, 1]:
+                leg_radius = radius + sign * (
+                    cpw_width / 2 + opts.cover_bridge_top_margin
+                )
+                angle_per_leg = leg_len / leg_radius
+                angle_per_hole = hole_len / leg_radius
+                angle_per_sec = angle_per_leg + angle_per_hole
+                n_leg = math.floor(abs(angle) / angle_per_sec)
+                first_angle_offset = self.cover_bridge_offset / leg_radius
+                for i in range(n_leg + 2):
+                    angle_offset = first_angle_offset + i * angle_per_sec
+                    add_leg_to_cell(leg_radius, angle_offset, angle_per_leg, sign)
+                final_offset = (
+                    self.cover_bridge_offset - leg_radius * abs(angle)
+                ) % sec_len
+                if final_offset > hole_len:
+                    final_offset -= sec_len
+                total_final_offset += final_offset
+            self.cover_bridge_offset = total_final_offset / 2
+            # self.cover_bridge_offset = (
+            #     self.cover_bridge_offset - radius * abs(angle)
+            # ) % sec_len
+            # if self.cover_bridge_offset > hole_len:
+            #     self.cover_bridge_offset -= sec_len
+            return
         if self.bridge_spacing > 0 and not opts.cover_bridge:
             left_angle = abs(angle)
             self.bridge_len_traker = max(0, self.bridge_len_traker)
@@ -964,14 +988,8 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
                 next_op.length,
                 next_op.direction,
             )
-            for c in commands:
-                match c:
-                    case ("a", int() | float() as radius, int() | float() as angle):
-                        self._turn_inner(radius, angle)
-                    case ("e", int() | float() as length):
-                        self._extend_inner(length)
-                    case _:
-                        raise Exception
+            final = _check_cpw_final(pending_ops)
+            self._add_meander_by_command(commands, final)
             super()._process_op_automeander(next_op, pending_ops, False)
 
     def _process_op_balancedmeander(
@@ -1003,15 +1021,19 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
             if next_op.depth is not None:
                 final_len = next_op.depth - next_op.calc_min_depth()
                 commands.append(("e", final_len))
-            for c in commands:
-                match c:
-                    case ("a", int() | float() as radius, int() | float() as angle):
-                        self._turn_inner(radius, angle)
-                    case ("e", int() | float() as length):
-                        self._extend_inner(length)
-                    case _:
-                        raise Exception
+            final = _check_cpw_final(pending_ops)
+            self._add_meander_by_command(commands, final)
             super()._process_op_balancedmeander(next_op, pending_ops, False)
+
+    def _add_meander_by_command(self, commands: list[tuple], final: bool):
+        for i, c in enumerate(commands):
+            match c:
+                case ("a", int() | float() as radius, int() | float() as angle):
+                    self._turn_inner(radius, angle, final and i == len(commands) - 1)
+                case ("e", int() | float() as length):
+                    self._extend_inner(length, final and i == len(commands) - 1)
+                case _:
+                    raise Exception
 
     def build(self) -> elements.CpwWaveguide:
         self._ensure_started()
@@ -1058,6 +1080,7 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
             datatype_list.extend(
                 [cfg.LD_BRIDGE_UNDER["datatype"], cfg.LD_BRIDGE["datatype"]]
             )
+            self.cover_bridge_offset = 0
         path = gdstk.RobustPath(
             to_complex(pos),
             width_list,
@@ -1123,7 +1146,7 @@ class PathOpGenerator:
         match point, angle:
             case (elements.DockingPort(), _) | (complex(), None):
                 self._ops.append(SegmentOp(point, radius))
-            case complex() as p, float() as a:
+            case (complex() as p), (float() | int() as a):
                 self._ops.append(
                     SegmentOp(elements.DockingPort(p, a + math.pi), radius)
                 )
@@ -1398,4 +1421,4 @@ if __name__ == "__main__":
     ops = pathop_gen.build()
     path = create_cpw_from_ops(ops, total_length=4500, options=options)
     elem.add_element(path)
-    elem.view()
+    elem.write_gds("test.gds")
