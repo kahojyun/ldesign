@@ -41,6 +41,9 @@ class PathOptions:
     parent_element: elements.Element | None = None
     first_bridge: float | None = None
     bridge_spacing: float | None = None
+    bridge_top_width: float = 3
+    bridge_sub_width: float = 7
+    bridge_pad_width: float = 4
     cover_bridge: bool = False
     cover_bridge_sub_margin: float = 5
     cover_bridge_top_margin: float = 3
@@ -739,11 +742,17 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
 
     def _make_bridge(self, point: complex, angle: float) -> None:
         if self._bridge is None:
-            cpw_args = self.options.cpw
-            # FIXME add path options
+            opts = self.options
+            cpw_args = opts.cpw
             bridge_len_sub = cpw_args.gap * 2 + cpw_args.width + 6
             self._bridge = crossover.Bridge(
-                crossover.BridgeArgs(length_sub=bridge_len_sub, width_sub=7), self.cfg
+                crossover.BridgeArgs(
+                    length_sub=bridge_len_sub,
+                    width_sub=opts.bridge_sub_width,
+                    width_pad=opts.bridge_pad_width,
+                    width_top=opts.bridge_top_width,
+                ),
+                self.cfg,
             )
         self.cpw.add_element(
             self._bridge,
