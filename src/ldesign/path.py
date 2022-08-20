@@ -819,6 +819,8 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
             left_len = abs(v) - final_leg_offset
             if left_len > 0:
                 add_leg_to_cell(final_leg_offset, min(left_len, leg_len), 1)
+            if final:
+                add_leg_to_cell(max(abs(v) - hole_len, 0), min(hole_len, abs(v)), 1)
             self.cover_bridge_offset = (self.cover_bridge_offset - abs(v)) % sec_len
             if self.cover_bridge_offset > hole_len:
                 self.cover_bridge_offset -= sec_len
@@ -903,6 +905,13 @@ class CpwWaveguideBuilder(_BaseOpVisitor):
                 for i in range(n_leg + 2):
                     angle_offset = first_angle_offset + i * angle_per_sec
                     add_leg_to_cell(leg_radius, angle_offset, angle_per_leg, sign)
+                if final:
+                    add_leg_to_cell(
+                        leg_radius,
+                        max(abs(angle) - angle_per_leg, 0),
+                        min(angle_per_leg, abs(angle)),
+                        sign,
+                    )
                 final_offset = (
                     self.cover_bridge_offset - leg_radius * abs(angle)
                 ) % sec_len
